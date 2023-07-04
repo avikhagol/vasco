@@ -1,7 +1,7 @@
 # vasco
 VASCO: VLBI and SMILE source based CASA Optimizations
 
-This is a helper tool for CASA based optimizations to use rPICARD and CASA for VLBI in general.
+This is a helper tool for CASA based optimizations to use rPICARD and CASA for VLBI in general for the SMILE sources.
 
 # USAGE
 ```bash
@@ -19,10 +19,19 @@ plotting:
                         list of parameters comma separated to fill in plotms
 ```
 
+# Installation
+After you clone the repo
+```bash
+
+$ cd vasco
+$ pip install .
+```
+
+
 # Development
 After you clone the repo
 ```bash
 
 $ cd vasco
-pip install -e .[dev]
+$ pip install -e .[dev]
 ```

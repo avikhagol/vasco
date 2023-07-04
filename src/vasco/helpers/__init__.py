@@ -1,16 +1,20 @@
-###### from casaplotms import plotms
-
 from pathlib import Path
 import os
 from os import path, makedirs
 from pyvirtualdisplay import Display
-from IPython.display import display as Idisplay, Image as Iimg
-from casaplotms import plotms
+from casatools import logsink
+
+vascolog=logsink('vasco.log')
+vascolog.setlogfile='vasco.log'
+vascolog.setglobal(True)
+
 
 def genplotms(vis, suffix='',kind='plot',w=None,h=None,z=1.5, **kwargs):
     """"
     This helper script can be used with jupyter notebook to create plots using plotms
     """
+    from casaplotms import plotms
+    
     params={'xaxis':'u', 'yaxis':'v'}
     params.update(kwargs)
     xaxis,yaxis=params['xaxis'],params['yaxis']
@@ -48,5 +52,5 @@ def genplotms(vis, suffix='',kind='plot',w=None,h=None,z=1.5, **kwargs):
     if kind!='plot':
         return plotfile
     else:
+        from IPython.display import display as Idisplay, Image as Iimg
         Idisplay(Iimg(plotfile))
-#         return Idisplay(Iimg(retplot))

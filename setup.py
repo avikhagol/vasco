@@ -23,7 +23,7 @@ setup(
                  ],
     long_description=desc,
     long_description_content_type = "text/markdown",
-    install_requires=["astropy", "numpy", "matplotlib", "pyvirtualdisplay", "casaplotms", "protobuf==3.20"
+    install_requires=["astropy", "numpy", "ipython", "pyvirtualdisplay", "casaplotms", "casatools","protobuf==3.20",
                       ],
     extras_require = {
         "dev" : ["pytest>=3.7",
