@@ -5,9 +5,12 @@ This is a helper tool for CASA based optimizations to use rPICARD and CASA for V
 
 # USAGE
 ```bash
-usage: vasco [-h] [-plist PARAMETER_LIST]
+usage: vasco [-h] [-plist PARAMETER_LIST] input_file
 
 VLBI and SMILE source based CASA Optimizations (VASCO).
+
+positional arguments:
+  input_file            Give the input file path.
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -17,6 +20,7 @@ plotting:
 
   -plist PARAMETER_LIST, --parameter-list PARAMETER_LIST
                         list of parameters comma separated to fill in plotms
+
 ```
 
 # Installation
