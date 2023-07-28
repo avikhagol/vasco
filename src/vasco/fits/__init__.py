@@ -6,9 +6,9 @@ import numpy as np
 from collections import Counter
 
 
-def _listobs(fitsfile,cardname=None) :
+def _listobs(fitsfile,hduname=None) :
     """
-    read fits file cards, produce a CASA listobs() output
+    read fits file hdus, produce a CASA listobs() output
 
     Parameters:
     ----------
@@ -16,8 +16,8 @@ def _listobs(fitsfile,cardname=None) :
     :fitsfile: (str)
         - give path for the right fitsfile eg .uvfits, .fits, .idifits
     
-    :cardname: (str)
-        - give name of the HDUList Cards separeted by comma
+    :hduname: (str)
+        - give name of the HDUList hdus separeted by comma
     
     Return:
     ------
@@ -30,7 +30,7 @@ def _listobs(fitsfile,cardname=None) :
     ```
     
     """
-    carddata,cardnames=None,[]
+    hdudata,hdunames=None,[]
     with fits.open(fitsfile) as hdul:
         
         for c in hdul:
@@ -39,11 +39,11 @@ def _listobs(fitsfile,cardname=None) :
             except:
                 pass
 
-            if c.name in cardname:
-                carddata=c.data
-                print(Table(carddata))
-            cardnames.append(c.name)
-        if "SCAN" in cardname:
+            if c.name in hduname:
+                hdudata=c.data
+                print(Table(hdudata))
+            hdunames.append(c.name)
+        if "SCAN" in hduname:
             uvtime=hdul['UV_DATA'].data.TIME
                                                         # SOURCE_ID name not consistent b/w VLBA nad EVN column of UV_DATA
             uvsidd=hdul['UV_DATA'].data
@@ -57,7 +57,7 @@ def _listobs(fitsfile,cardname=None) :
             zerotime=Time(dateobs, format='isot',scale='utc')
             scantime=zerotime.mjd+scanmjd
             integrationTime=Counter(hdul['UV_DATA'].data.INTTIM).keys()
-
+            
             sourcename={}
             ind_inst=np.where((np.diff(uvsid)!=0)==True)
             ind_inst=np.append(ind_inst,-1)
@@ -92,7 +92,7 @@ def _listobs(fitsfile,cardname=None) :
     
                 
             
-        # print(Table(carddata))
-    print(f"other possible cards can be: {str(cardnames)}")
+        # print(Table(hdudata))
+    print(f"other possible hdus can be: {str(hdunames)}")
 
     

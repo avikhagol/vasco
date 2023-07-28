@@ -22,7 +22,7 @@ optional arguments:
 
 plotting:
   
-                                     use plotms based arguments to generate plots in the terminal.
+                               use plotms based arguments to generate plots in the terminal.
 
   -plist PARAMETER_LIST, --parameter-list PARAMETER_LIST
                         list of parameters comma separated to fill in plotms

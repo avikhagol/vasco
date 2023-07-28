@@ -16,7 +16,7 @@ plotting.add_argument('-plist', '--parameter-list', help="list of parameters com
 op=parser.add_argument_group('operations',"""
                              use operations based on file type e.g., .FITS .MS
 """)
-op.add_argument('-l','--list-observation',help="lists all the useful details similar to listobs in CASA.", required=False, action="store", const="SOURCE", nargs='?')
+op.add_argument('-l','--list-observation',help="lists all the useful details similar to listobs in CASA or listr in AIPS.", required=False, action="store", const="SCAN", nargs='?')
 
 
 args=parser.parse_args()
