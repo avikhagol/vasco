@@ -21,7 +21,16 @@ brightcal:['J0927+3902', 'J1310+3220']
 ```bash
 usage: vasco [-h] [-plist PARAMETER_LIST] [-l [LIST_OBSERVATION]] [-it] input_file [input_file ...]
 
-VLBI and SMILE source based CASA Optimizations (VASCO).
+____    ____  ___           _______.  ______   ______   
+\   \  /   / /   \         /       | /      | /  __  \  
+ \   \/   / /  ^  \       |   (----`|  ,----'|  |  |  | 
+  \      / /  /_\  \       \   \    |  |     |  |  |  | 
+   \    / /  _____  \  .----)   |   |  `----.|  `--'  | 
+    \__/ /__/     \__\ |_______/     \______| \______/  
+
+    VLBI and SMILE source based CASA Optimizations (VASCO).                                                        
+    
+    
 
 positional arguments:
   input_file            Give the input file path.

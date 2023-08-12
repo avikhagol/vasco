@@ -3,8 +3,21 @@ from pathlib import Path
 import argparse
 from vasco.fits import _listobs, identify_targets
 
-parser = argparse.ArgumentParser('vasco', description="""
-VLBI and SMILE source based CASA Optimizations (VASCO).""", 
+def ascii_art():
+    art="""
+____    ____  ___           _______.  ______   ______   
+\   \  /   / /   \         /       | /      | /  __  \  
+ \   \/   / /  ^  \       |   (----`|  ,----'|  |  |  | 
+  \      / /  /_\  \       \   \    |  |     |  |  |  | 
+   \    / /  _____  \  .----)   |   |  `----.|  `--'  | 
+    \__/ /__/     \__\ |_______/     \______| \______/  
+
+    VLBI and SMILE source based CASA Optimizations (VASCO).                                                        
+    
+    """
+    return art
+
+parser = argparse.ArgumentParser('vasco', description=ascii_art(), 
 formatter_class=argparse.RawDescriptionHelpFormatter)
 
 parser.add_argument('input_file', help='Give the input file path.', nargs='+')
