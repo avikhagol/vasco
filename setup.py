@@ -10,7 +10,7 @@ setup(
     author='Avinash Kumar',
     author_email='avialxee@gmail.com',
     description='VASCO: VLBI and SMILE source based CASA Optimizations.',
-    py_modules = ["vasci"],
+    py_modules = ["vasco"],
     package_dir={'':'src'},
     classifiers=["Programming Language :: Python :: 3",
                  "Programming Language :: Python :: 3.6",
