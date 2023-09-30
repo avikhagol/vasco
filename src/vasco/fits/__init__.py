@@ -5,7 +5,7 @@ from astropy.table import Table, QTable
 import numpy as np
 from collections import Counter
 import numpy as np
-
+from scipy.spatial import distance
 
 def _getcolname(data,colnames=['SOURCE']):
     _colname=None
@@ -201,17 +201,20 @@ def identify_targets(ispref,sdict,sourcename):
 def find_refant(fitsfile):
     f=fits.open(fitsfile)
     hduname=_gethduname(f, ['SYSTEM_TEMPERATURE'])
+    # hduname='SYSTEM_TEMPERATURE'
     if hduname:
         tsys1=f[hduname].data.TSYS_1
         tsys2=None
         if 'TSYS_2' in f[hduname].columns.names:tsys2=f[hduname].data.TSYS_2
         antenna=f[hduname].data.ANTENNA_NO
         antenna_dict=dict(zip(f['ANTENNA'].data['ANTENNA_NO'],(f['ANTENNA'].data['ANNAME'])))
+        xyz,anname_geom=f['ARRAY_GEOMETRY'].data.STABXYZ, f['ARRAY_GEOMETRY'].data.ANNAME
 
         anlist,tsys1_std,tsys2_std,ancountlist,missing_antennav=[],[],[],[],[]
         ancount=Counter(antenna)
+        med_d=[]
         for ant in antenna_dict.keys():
-            
+
             s_ind=np.where(antenna==ant) # select each antenna for all sources
             if len(s_ind[0]):
                 anlist.append(antenna_dict[ant])    
@@ -220,17 +223,36 @@ def find_refant(fitsfile):
                 ancountlist.append(ancount[ant])
             else:
                 missing_antennav.append(antenna_dict[ant])
+                
+            
+            d=[]
+            refcoord=xyz[np.where(anname_geom==antenna_dict[ant])][0]
+            # xyz - np.min(xyz, axis=0)
+            for i,v in enumerate(xyz):
+                d.append(distance.minkowski(refcoord,v)*.0001) # distance of all from one refant
+            med_d.append((antenna_dict[ant],np.median(d)))                    # median distance of all ants for one refant
+    #     med_dlist=list(zip(*med_d))[1]
+        ant_with_d=dict(med_d)
+                
         if len(tsys2_std) == len(tsys1_std):
             tsys_std=np.median([tsys1_std,tsys2_std],axis=0)
-            
+
         else:
             tsys_std=tsys1_std
-        
+            
+            
+
         t=QTable([anlist,tsys_std,ancountlist], names=('ANNAME', 'STD_TSYS','nRows'), meta={'name':'ANTENNA TSYS Variance'})
-        for ant in missing_antennav: t.add_row([ant, float('nan'), 0])
+        t['Distance']=[ant_with_d[ant] for ant in t['ANNAME']]
+        for ant in missing_antennav: t.add_row([ant, float('nan'), 0,ant_with_d[ant]])
         tp=t.to_pandas()
-        print(tp.sort_values(by=['STD_TSYS', 'nRows'], ascending=[True, False]))
-        
+        med_tp=tp['nRows'].median()
+        for sigma in [1.5,1.4,1.3,1.2,1.1,1.0,0.9]:
+            med_above=tp['nRows']>=med_tp*sigma
+            tp_cut=tp[med_above]
+            if len(tp_cut)>=4:break
+        print(tp_cut.sort_values(by=['STD_TSYS', 'Distance'], ascending=[True, True]).to_string(index=False))
+
     else:
         print('missing TSYS info!\n')
     
