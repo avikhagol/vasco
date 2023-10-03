@@ -2,11 +2,11 @@ from pathlib import Path
 import os
 from os import path, makedirs
 from pyvirtualdisplay import Display
-from casatools import logsink
+# from casatools import logsink
 
-vascolog=logsink('vasco.log')
-vascolog.setlogfile='vasco.log'
-vascolog.setglobal(True)
+# vascolog=logsink('vasco.log')
+# vascolog.setlogfile='vasco.log'
+# vascolog.setglobal(True)
 
 
 def genplotms(vis, suffix='',kind='plot',w=None,h=None,z=1.5, **kwargs):
