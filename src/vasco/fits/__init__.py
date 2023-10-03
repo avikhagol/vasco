@@ -287,15 +287,3 @@ class Targets:
         
         self.check_phaseref=check_phaseref(self.scanlist_arr)
         self.identify_target=identify_targets(self.check_phaseref[0],self.check_phaseref[1],self.sourcename)
-        # self.targets = identify_targets(self.fitsfile)
-    
-    
-    
-
-# fitsfile='/data/avi/d/BB240GD/BB240/BB240GD/VLBA_BB240GD_bb240gd_BIN0_SRC0_0_110927T171838.idifits'
-# # uv_data=hdul['UV_DATA'].data
-# # sa,ind_sa= scanlist(uv_data)
-# # isph,sdict=_check_phaseref(sa)
-# # st,pt,ct=_return_target(sdict)
-# # print(st,pt,ct)
-# print(identify_targets(fitsfile))

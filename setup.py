@@ -34,7 +34,7 @@ setup(
     },
      entry_points={ 
         "console_scripts": [
-            "vasco=vasco.cli:cli"
+            "vasco=vasco:cli"
         ],
     },
 
