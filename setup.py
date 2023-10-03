@@ -24,7 +24,7 @@ setup(
     long_description=desc,
     long_description_content_type = "text/markdown",
     install_requires=["astropy", "numpy", "ipython", "pyvirtualdisplay", "pandas", "scipy",
-                      "casaplotms", # start depreciation soon
+                    #  "casaplotms", # start depreciation
                     #   "casatools",
                       "protobuf==3.20",
                       ],
