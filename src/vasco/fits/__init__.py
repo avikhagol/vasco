@@ -5,7 +5,7 @@ from astropy.table import Table, QTable
 import numpy as np
 from collections import Counter
 import numpy as np
-from scipy.spatial import distance
+
 
 def _getcolname(data,colnames=['SOURCE']):
     _colname=None
@@ -220,6 +220,7 @@ def find_refant(fitsfile):
     hduname=_gethduname(f, ['SYSTEM_TEMPERATURE'])
     # hduname='SYSTEM_TEMPERATURE'
     if hduname:
+        from scipy.spatial import distance
         tsys1=f[hduname].data.TSYS_1
         tsys2=None
         if 'TSYS_2' in f[hduname].columns.names:tsys2=f[hduname].data.TSYS_2
@@ -246,7 +247,7 @@ def find_refant(fitsfile):
             refcoord=xyz[np.where(anname_geom==antenna_dict[ant])][0]
             # xyz - np.min(xyz, axis=0)
             for i,v in enumerate(xyz):
-                d.append(distance.minkowski(refcoord,v)*.0001) # distance of all from one refant
+                d.append(distance.minkowski(refcoord,v)*.001) # distance of all from one refant
             med_d.append((antenna_dict[ant],np.median(d)))                    # median distance of all ants for one refant
     #     med_dlist=list(zip(*med_d))[1]
         ant_with_d=dict(med_d)
