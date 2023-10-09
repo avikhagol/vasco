@@ -221,11 +221,12 @@ def find_refant(fitsfile):
     # hduname='SYSTEM_TEMPERATURE'
     if hduname:
         from scipy.spatial import distance
-        tsys1=f[hduname].data.TSYS_1
+        tsys1=f[hduname].data.TSYS_1                                                                # This axis should be always present
         tsys2=None
+        antenna_d=f['ANTENNA'].data
         if 'TSYS_2' in f[hduname].columns.names:tsys2=f[hduname].data.TSYS_2
         antenna=f[hduname].data.ANTENNA_NO
-        antenna_dict=dict(zip(f['ANTENNA'].data['ANTENNA_NO'],(f['ANTENNA'].data['ANNAME'])))
+        antenna_dict=dict(zip(antenna_d['ANTENNA_NO'],(antenna_d['ANNAME'])))
         xyz,anname_geom=f['ARRAY_GEOMETRY'].data.STABXYZ, f['ARRAY_GEOMETRY'].data.ANNAME
 
         anlist,tsys1_std,tsys2_std,ancountlist,missing_antennav=[],[],[],[],[]
@@ -233,10 +234,10 @@ def find_refant(fitsfile):
         med_d=[]
         for ant in antenna_dict.keys():
 
-            s_ind=np.where(antenna==ant) # select each antenna for all sources
+            s_ind=np.where(antenna==ant)                                                            # Select each antenna for all sources
             if len(s_ind[0]):
                 anlist.append(antenna_dict[ant])    
-                tsys1_std.append(np.median((np.std(tsys1[s_ind], axis=0))))
+                tsys1_std.append(np.median((np.std(tsys1[s_ind], axis=0))))                         # Calculates standard deviation for each IFs and then takes median
                 if tsys2 is not None: tsys2_std.append(np.median((np.std(tsys2[s_ind], axis=0))))
                 ancountlist.append(ancount[ant])
             else:
@@ -247,13 +248,13 @@ def find_refant(fitsfile):
             refcoord=xyz[np.where(anname_geom==antenna_dict[ant])][0]
             # xyz - np.min(xyz, axis=0)
             for i,v in enumerate(xyz):
-                d.append(distance.minkowski(refcoord,v)*.001) # distance of all from one refant
-            med_d.append((antenna_dict[ant],np.median(d)))                    # median distance of all ants for one refant
+                d.append(distance.euclidean(refcoord,v)*.001)                                       # Distance of all from one refant
+            med_d.append((antenna_dict[ant],np.median(d)))                                          # Median distance of all ants for one refant
     #     med_dlist=list(zip(*med_d))[1]
         ant_with_d=dict(med_d)
                 
         if len(tsys2_std) == len(tsys1_std):
-            tsys_std=np.median([tsys1_std,tsys2_std],axis=0)
+            tsys_std=np.median([tsys1_std,tsys2_std],axis=0)                                        # Calculate median if TSYS1 and TSYS2 both are present
 
         else:
             tsys_std=tsys1_std
