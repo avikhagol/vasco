@@ -1,8 +1,6 @@
 import argparse
 from pathlib import Path
 
-
-
 def ascii_art():
     art="""
 ____    ____  ___           _______.  ______   ______   
