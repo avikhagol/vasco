@@ -122,8 +122,6 @@ def sources(hdul):
     return sourcename
 
 
-
-
 def scanlist(hdul):
     """
     return array of scanlist and index of the scan in the sequence of data from UV_DATA column
