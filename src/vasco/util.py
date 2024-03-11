@@ -150,3 +150,11 @@ def df_fromtxt(filename):
 def search_source(sources, filename):
     df_rfc = df_fromtxt(filename)
     return df_rfc[df_rfc.isin(sources).any(axis=1)]
+
+def search_sources(sources, filename):
+    from pandas import concat
+    df_rfc = df_fromtxt(filename)
+    nsources = [source[:9] for source in sources]
+    jsources = [f'J{source}' for source in nsources]
+    res = concat([df_rfc[df_rfc.isin(nsources).any(axis=1)], df_rfc[df_rfc.isin(jsources).any(axis=1)]])
+    return res

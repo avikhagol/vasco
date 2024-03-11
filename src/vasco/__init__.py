@@ -114,11 +114,13 @@ def cli():
 
     elif args.search_source:
         sources = args.search_source.split(',')
-        from vasco.util import search_source
-        source_found = search_source(sources, str(desc))
+        from vasco.util import search_sources
+        source_found = search_sources(sources, str(desc))
         if args.column:
             source_found = source_found[args.column.split(',')]
-        print(f"search_source({sources}, {desc})")
+            print(f"search_sources({sources}, {desc})[{str(args.column.split(','))}]")
+        else:            
+            print(f"search_sources({sources}, {desc})")
         print(source_found)
         
     elif not status_check: 

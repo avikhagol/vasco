@@ -114,6 +114,19 @@ def _listobs(fitsfile,cardname=None) :
     
     print(f"Possible hdus can be: {str(hdunames)}")
 
+def get_source_id(hdul, source_name, source_hduname = 'SOURCE'):
+    """
+    returns source id for source name as input
+    """
+    source_data = hdul[source_hduname].data
+
+    source_col = _getcolname(source_data,['SOURCE'])
+    id_col = _getcolname(source_data,['SOURCE_ID', 'ID_NO.', 'ID_NO'])
+    
+    sourceid = hdul[source_col].data[source_data[source_col]==source_name][id_col]
+    
+    return sourceid
+
 def sources(hdul):
     sourced=hdul['SOURCE'].data
     sourcename={}
@@ -391,7 +404,7 @@ def find_refant(fitsfile, verbose=True, return_onmissing=False):
         if verbose: print('missing TSYS info!\n')
         if return_onmissing: return False
 
-def split(hdul, sids, outfits):
+def split(hdul, sids: list, outfits : str):
     """
     Takes hdul and splits file to 'outfits' with only 'sids' present.
     """
