@@ -312,31 +312,29 @@ def identify_refant(fitsfile, n=4, refants=[], **kwargs):
     else: refants = refant_found[:n].ANNAME
     return refants
 
-def find_refant(fitsfile, verbose=True, return_onmissing=False):
-    """takes fitsfile as input and returns the reference antenna which is good geometrically, observation length, and by TSYS
-    prints table with columns [ANNAME,STD_TSYS,nRows,Distance,c] sorted by best reference antenna;
+
+def find_refant(fitsfile, verbose=True, return_onmissing=False, tsys_wt=None, nrows_wt=None, distance_wt=None):
+    """takes fitsfile as input and returns the reference antenna which is good geometrically, observation length, and by SEFD
+    prints table with columns [ANNAME,STD_TSYS,nRows,Distance] sorted by best reference antenna; returns a dictionary of the same table.
 
     Returns:
     -----
 
-    (pandas dataframe)
+    (dict)
     sorted dataframe in order of best antenna.
-
-    if return_onmissing is True, returns False for missing TSYS info.
 
     columns 
 
-    ANNAME      : Antenna Name
-    STD_TSYS    : Standard Deviation in the TSYS value
-    nRows       : number of rows for each station/anenna
-    Distance    : Centroid distance for each station/antenna
-    c           : confidence value taken as the multiplication of the normalized three values.
+    ANNAME      {antenna_id : antenna_name}
+    STD_TSYS    {antenna_id : standard_deviation_of_TSYS}
+    nRows       {antenna_id : no_of_datapoints}
+    Distance    {antenna_id : median_distance}
 
-    TODO: prompt on nan values when present in TSYS
+    TODO: prompt on nan values when present
 
     """
     f=fits.open(fitsfile)
-    hduname,lids=_gethduname(f, ['SYSTEM_TEMPERATURE'])
+    hduname=_gethduname(f, ['SYSTEM_TEMPERATURE'])
     
     if hduname:
         from scipy.spatial import distance
@@ -389,14 +387,17 @@ def find_refant(fitsfile, verbose=True, return_onmissing=False):
         tp_res=tp
         max_nrows= tp_res['nRows'].max()
         max_distance = tp_res['Distance'].max()
-        max_std_tsys = tp_res['STD_TSYS'].median()
+        max_std_tsys = tp_res['STD_TSYS'].max()
 
-        tsys=tp_res['STD_TSYS']/max_std_tsys
-        nrows= tp_res['nRows']/max_nrows
-        distance = tp_res['Distance']/max_distance
-
-        res=tsys*nrows*distance
-        res=1-(res/res.max())
+        tsys=1-(tp_res['STD_TSYS']/max_std_tsys)
+        nrows= (tp_res['nRows']/max_nrows)
+        distance = 1-((tp_res['Distance']/max_distance))
+        
+        if not tsys_wt:tsys_wt = 0.99
+        if not nrows_wt:nrows_wt = 0.95
+        if not distance_wt:distance_wt = 0.80
+        
+        res=(tsys*tsys_wt+nrows*nrows_wt+distance*distance_wt)/(tsys_wt+nrows_wt+distance_wt)
         
         tp_res.insert(4,'c', res)
         tp_res = tp_res.sort_values(by='c', ascending=[False])
