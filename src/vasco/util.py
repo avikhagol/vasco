@@ -158,3 +158,4 @@ def search_sources(sources, filename):
     jsources = [f'J{source}' for source in nsources]
     res = concat([df_rfc[df_rfc.isin(nsources).any(axis=1)], df_rfc[df_rfc.isin(jsources).any(axis=1)]])
     return res
+

@@ -7,6 +7,7 @@ from collections import Counter
 import numpy as np
 import itertools
 from pathlib import Path
+from pandas import DataFrame as df
 
 def _getcolname(data,colnames=['SOURCE']):
     _colname=None
@@ -127,6 +128,16 @@ def get_source_id(hdul, source_name, source_hduname = 'SOURCE'):
     
     return sourceid
 
+def get_sources_id(hdul, source_list):
+    """
+    returns list of source ids for list of source names as input
+    """
+    sources_dict = sources(hdul)
+        
+    s_df = df(list(sources_dict.values()), columns=['source_name'], index=list(sources_dict.keys()))
+    sourceid = s_df[s_df['source_name'].isin(source_list)]
+    return list(sourceid.index)
+
 def sources(hdul):
     sourced=hdul['SOURCE'].data
     sourcename={}
@@ -224,21 +235,35 @@ def check_phaseref(scanlist_arr):
     
 #     return seq_s, phref_byidx
 
-def find_first_occurrence(arr, sequence):
+class Phaseref:
+    
+    from astropy.coordinates import SkyCoord as SC
+    
+
+    
+    def __init__(self, fitsfile, target_source, sep_limit=10) -> None:
+
+        self.fitsfile               =   fitsfile
+        self.target_source          =   target_source
+        self.sep_limit              =   sep_limit
+        self.hdul                   =   fits.open(fitsfile)
+
+    
+
+def find_first_occurrence(arr, sequence, occured_freq=1):
+    """
+    finds id of the source from the sequence for the list of array
+    """
     # Convert sequence to set for faster membership testing
     sequence_set = set(sequence)
     sequence_length = len(sequence_set)
-
+    first_occurrence_index = None
     # Find occurrences of the sequence
     occurrences = [i for i in range(len(arr) - sequence_length + 1) if set(arr[i:i+sequence_length]) == sequence_set]
 
-    if len(occurrences)>1:
-        # Find the index of the first occurrence
-        first_occurrence_index = occurrences[0]
-        return first_occurrence_index
-    else:
-        # Return None if no occurrence is found
-        return None
+    if len(occurrences)>occured_freq:
+        first_occurrence_index = occurrences[0]     # Find the index of the first occurrence
+    return first_occurrence_index
     
 def identify_sources(fitsfile):
     t = Targets(fitsfile)
@@ -252,15 +277,14 @@ def identify_sources(fitsfile):
         'science_target' : None
     }
     
-    science_target=[]
-    calibrators_phaseref=[]
-    _, dic = t.check_phaseref
-#     seq_s,idx_s=find_source_seq(t)
-    sd = set(dic['phref'].keys())
-    sourcenames = sources(t.hdul)
-    seq_s = itertools.combinations(sd,2)
+    science_target          =   []
+    calibrators_phaseref    =   []
+    isphref, dic            =   t.check_phaseref
+    sd                      =   set(dic['phref'].keys())
+    sourcenames             =   sources(t.hdul)
+    seq_s                   =   itertools.combinations(sd,2)
     for seq in seq_s:
-        idx_f_o_cl= find_first_occurrence(source_list,seq)
+        idx_f_o_cl          =   find_first_occurrence(source_list,seq)
         
         if idx_f_o_cl is not None: 
             sid = source_list[idx_f_o_cl]
@@ -269,15 +293,185 @@ def identify_sources(fitsfile):
                 calibrators_phaseref.extend([sid])
             if st not in calibrators_phaseref:
                 science_target.extend([st])
-#             print(sid,st,s['calibrators_phaseref'])
     phrefs = list(set(dic['other'].keys()))
     if len(phrefs):
-        s['calibrators_instrphase'] = [sourcenames[s] for s in phrefs]
-        s['calibrators_bandpass'] = s['calibrators_instrphase']
+        s['calibrators_instrphase']     =   [sourcenames[s] for s in phrefs]
+        s['calibrators_bandpass']       =   s['calibrators_instrphase']
     if len(science_target):
-        s['science_target'] = [sourcenames[s] for s in list(set(science_target))]
+        s['science_target']             =   [sourcenames[s] for s in list(set(science_target))]
     if len(calibrators_phaseref):
-        s['calibrators_phaseref'] = [sourcenames[s] for s in list(set(calibrators_phaseref))]
+        s['calibrators_phaseref']       =   [sourcenames[s] for s in list(set(calibrators_phaseref))]
+    return s
+
+def list_fromdict(d):
+    nlist=set()
+    d.values()
+    for ss in d.values():
+        if ss:
+            nlist.update(ss)
+    return list(nlist)
+
+
+def check_band(hdul):
+    """
+    return band closest to S,C,X,U,K of observation
+    """   
+    
+    freq = hdul['FREQUENCY'].header['REF_FREQ']/1.0E+09
+    band = freq
+    bands = {
+        'S' : np.array([2.0, 3.35]),
+        'C' : np.array([3.355, 5.5]),
+        'X' : np.array([8.0, 12.0]),
+        'U' : np.array([40.0, 60.0]),
+        'K' : np.array([18.0, 27.0])
+    }
+    compare = 999.0
+    for k,v in bands.items():
+        val = (np.abs(v-freq)).min()
+        
+        if compare > val: 
+            band = k
+            compare = val
+    return band
+
+def id_flux_for_sources(hdul, sources, rfcfile, dataframe=True):
+    band     = check_band(hdul)
+    from vasco.util import search_sources
+    
+    res = search_sources(sources, rfcfile)[['IVS name', 'J2000 name', f'{band}_T-', f'{band}_Tot']]
+    nsources = [source[:9] for source in sources]
+    ivsname, j2name, m, flux = res.values.T
+    j2name = [j2n.replace('J', '') for j2n in j2name]
+
+    dic = {}
+    for s,source in enumerate(nsources):
+        sid = get_source_id(hdul, sources[s])
+
+        idx = None
+        for i, isource in enumerate(ivsname):
+            if source in isource: idx = i
+        for j, jsource in enumerate(j2name):
+            if source in jsource: idx = j
+        if idx: 
+            if m[idx]!='-': dic[sid[0]] = {'flux':float(flux[idx])}
+        
+    if dataframe:return df.from_dict(dic, orient='index', columns=['flux'])
+    else: return dic
+    
+def find_phaseref(target_source, t, source_fluxes, sep_limit=2):
+    """
+    finds phaseref source in the sep_limit
+    """
+    phref_pair_res     =   t.find_phaseref_pairs(target_source, sep_limit)
+    phref_id           =   phref_pair_res[:2].index
+    phref_source,sel_id=   [None]*2
+    
+    for p_id in phref_id:
+        if p_id in source_fluxes.index:
+            flux = source_fluxes['flux'][p_id]
+            if flux > 0.150:
+                sel_pid = p_id
+    if sel_pid: 
+        phref_source = phref_pair_res['source'][sel_pid]
+        return phref_source, sel_pid
+
+def find_phref_for_target_islowsnr(fitsfile, target_source, rfcfile, flux_thres=150, sep_limit=2):
+    """
+    if scanlist is non-phaseref and target is low snr or flux missing for target 
+    treat as phref. 
+    But if phref not found in set sep_limit treat as non-phaseref.
+    
+    Returns
+    ---    
+    
+    phaseref_source_name, phaseref_source_id
+    """
+    phref_source, p_id = [None]*2
+    t = Targets(fitsfile)
+    isphref, dic_phref     =   t.check_phaseref
+    source_fluxes = id_flux_for_sources(t.hdul, t.sources_list, rfcfile)
+    target_id = get_source_id(t.hdul, target_source)[0] 
+    flux_target = 0
+    if target_id in source_fluxes.index: # also when low snr
+        flux_target    =   source_fluxes['flux'][target_id]
+    if (flux_target<flux_thres) or (not target_id in source_fluxes.index):
+        if not isphref:
+            phref_source, p_id = find_phaseref(target_source, t, source_fluxes, sep_limit)
+        
+    return phref_source, p_id
+
+def find_calibrators(hdul, calib_ids=[]):
+    """
+    To find calibrator sources using TSYS and refant information.
+    """
+    sources_dict =   sources(hdul)
+    source_df    =   df(list(sources_dict.values()), index=list(sources_dict.keys()), columns=['source_name'])
+
+    hduname,_    =   _gethduname(hdul, ['SYSTEM_TEMPERATURE'])
+    sid_colname  =   _getcolname(hdul[hduname],['SOURCE_ID', 'ID_NO.', 'ID_NO'])
+
+    tsys_rec     =   hdul[hduname].data
+    tsys1_std,tsys2_std    =   [],[]
+    str_ts1, str_ts2 = 'TSYS_1', 'TSYS_2'
+    tsys1        =   tsys_rec[str_ts1]
+    tsys2        =   tsys_rec[str_ts2] if str_ts2 in tsys_rec.columns.names else None
+
+    calib        =   {}
+    calids = calib_ids if len(calib_ids) else list(sources_dict.keys())
+
+    for c in calids:
+        tsys1_std.append(np.nanstd(np.nanmean(tsys_rec[tsys_rec[sid_colname]==c][str_ts1], axis=0)))
+        if len(tsys1)==len(tsys2) : tsys2_std.append(np.nanstd(np.nanmean(tsys_rec[tsys_rec[sid_colname]==c][str_ts2], axis=0)))
+        else: tsys_std = tsys1_std
+    tsys_std    =   np.nanmean([tsys1_std, tsys2_std], axis=0)
+    tsys_df     =   df(tsys_std, index=calids, columns=['std_tsys'])
+    tsys_df     =   tsys_df.sort_values(by=['std_tsys'],ascending=[True])
+
+    calib['calibrators_instrphase'] = calib['calibrators_bandpass'] = list(source_df['source_name'][tsys_df.index[:2]])
+
+    
+    return calib
+
+def identify_sources_fromtarget(fitsfile, target_source, rfcfile=None, verbose=False):
+    t = Targets(fitsfile)
+    s = identify_sources(fitsfile)
+    
+    isphref, dic = t.check_phaseref
+    
+    calib_candidates = set()
+    calib_candidates.update(s['calibrators_instrphase'])
+    
+    allsources=set()
+    s.values()
+    for ss in s.values():
+        if ss:
+            allsources.update(ss)
+            
+    if len(allsources)>=3:
+        if isphref: # check whether science target is a phaseref calibrator
+            if verbose: print('is phref')
+            if target_source in s['calibrators_phaseref']:
+                if verbose: print('target is calib')
+                if rfcfile:
+                    ps, pid = find_phref_for_target_islowsnr(fitsfile, target_source, rfcfile, sep_limit=10)
+                    if not ps: 
+                        if verbose : print('target is calib but ps not found')
+                        isphref = False
+                        s['calibrators_phaseref'] = None
+            else:
+                calib_candidates.update(s['calibrators_phaseref'])
+
+        if not isphref:
+            
+            s['science_target'] = [target_source]
+            if target_source in s['calibrators_instrphase']:
+                s['calibrators_bandpass'].remove(target_source)
+                s['calibrators_instrphase'].remove(target_source)
+
+    id_calib_candidates = get_sources_id(t.hdul, calib_candidates)
+    calib = find_calibrators(t.hdul, id_calib_candidates)
+    s.update(calib)
     return s
 
 # def identify_targets(ispref,sdict,sourcename):
@@ -434,14 +628,77 @@ def split(hdul, sids: list, outfits : str):
         return False
 
 class Targets:
+    from astropy.coordinates import SkyCoord as SC
+    
+
+    
     def __init__(self,fitsfile) -> None:
-        self.fitsfile=fitsfile
+        self.fitsfile               =   fitsfile
     
         # helper and output variables
-        self.hdul=fits.open(fitsfile)
-        self.scanlist_arr,ind_sl=scanlist(self.hdul)
-        self.sourcename=sources(self.hdul)
+        self.hdul                   =   fits.open(fitsfile)
+        self.scanlist_arr,_         =   scanlist(self.hdul)
+        self.sourcename             =   sources(self.hdul)
+        self.SOURCE                 =   self.hdul['SOURCE'].data
+        self.scolname               =   _getcolname(self.SOURCE,['SOURCE'])
+        self.sources_list           =   self.SOURCE[self.scolname]
         
-        self.check_phaseref=check_phaseref(self.scanlist_arr)
-        # self.identify_sources = identify_sources()
-        # self.identify_target=identify_targets(self.check_phaseref[0],self.check_phaseref[1],self.sourcename)
+        self.check_phaseref         =   check_phaseref(self.scanlist_arr)
+
+    def find_nearby_source(self, SOURCE, target_source):
+        """
+        use coordinate information in SOURCE table to look for nearest source
+        returns source_name, 2d_sky_distance
+        """
+        ps, sep                     =   [None]*2
+        # SOURCE                      =   self.hdul['SOURCE'].data
+        other_sources               =   self.SOURCE[self.SOURCE.SOURCE!=target_source]
+
+        allsources                  =   self.SC(other_sources['RAEPO']*u.degree,other_sources['DECEPO']*u.degree)
+        target_source               =   self.SOURCE[self.SOURCE['SOURCE']==target_source]
+        c                           =   self.SC(target_source.RAEPO*u.degree, target_source.DECEPO*u.degree)
+        idx, d2d, _                 =   c.match_to_catalog_sky(allsources)
+        if idx.size: ps, sep        =   other_sources[idx].SOURCE[0], d2d[0].deg
+        return ps, sep
+
+    def find_phaseref_pairs(self, target_source, sep_limit=10):
+        """
+        Input
+        ---
+
+        :target_source:     (str)   source to look for phase_reference as input 
+        :sep_limit:         (float) separation limit in degrees
+
+        Returns
+        ---
+
+        DataFrame with Source_ID, Sources, Chances sorted in descending by chances
+
+        """
+        slist, _                    =   scanlist(self.hdul)
+        # SOURCE                      =   self.hdul['SOURCE'].data
+        sid_colname                 =   _getcolname(self.SOURCE,['SOURCE_ID', 'ID_NO.', 'ID_NO'])
+        other_sources               =   self.SOURCE[self.SOURCE.SOURCE!=target_source]
+        id_target                   =   get_source_id(self.hdul, target_source)[0]
+        target_source               =   self.SOURCE[self.SOURCE['SOURCE']==target_source]
+        
+        c                           =   self.SC(target_source.RAEPO*u.degree, target_source.DECEPO*u.degree)
+        allsources                  =   self.SC(other_sources['RAEPO']*u.degree,other_sources['DECEPO']*u.degree)
+        
+        _, idxres, seps, _          =   allsources.search_around_sky(c, sep_limit*u.degree)
+        
+        chances                     =   [0.0]*len(idxres)
+
+        for i, idx in enumerate(idxres):
+            
+            p_sep, closer_scan      =   [0.0]*2
+            
+            id_ps                   =   get_source_id(self.hdul, other_sources.SOURCE[idx])[0]
+            p_sep                   =   sep_limit - seps[i].deg
+            id_found                =   find_first_occurrence(slist, (id_ps, id_target), 0)
+            if id_found is None: id_found = find_first_occurrence(slist, (id_target, id_ps))
+            if id_found : closer_scan = 1
+            chances[i]              =   (np.round(((1/sep_limit)*p_sep + closer_scan)/2, 3))
+        res                         =   self.df(zip(other_sources[idxres].SOURCE, chances), index=list(other_sources[idxres][sid_colname]), columns=['source', 'chances'])
+        res                         =   res.sort_values(by=['chances'], ascending=[False])
+        return res
