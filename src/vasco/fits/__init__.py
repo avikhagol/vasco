@@ -8,6 +8,8 @@ import numpy as np
 import itertools
 from pathlib import Path
 from pandas import DataFrame as df
+import warnings
+warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 
 def _getcolname(data,colnames=['SOURCE']):
     _colname=None
@@ -91,7 +93,7 @@ def _listobs(fitsfile,cardname=None) :
                 scanlist=uvsid[ind_inst]
                 totalrows=len(uvsid)
                 sourceid_colname=_getcolname(sourced,['SOURCE_ID', 'ID_NO.', 'ID_NO'])        
-                                                                                             # ID_NO. name not consistent b/w VLBA nad EVN column of SOURCE
+                                                                                                # ID_NO. name not consistent b/w VLBA nad EVN column of SOURCE
 
                 for i,sid in enumerate(sourced[sourceid_colname]):
                     sourcename[sid]=hdul['SOURCE'].data.SOURCE[i]
@@ -128,14 +130,13 @@ def get_source_id(hdul, source_name, source_hduname = 'SOURCE'):
     
     return sourceid
 
-def get_sources_id(hdul, source_list):
+def get_sources_id(sources_dict, sources):
     """
-    returns list of source ids for list of source names as input
+    returns source id for source name as input
     """
-    sources_dict = sources(hdul)
-        
     s_df = df(list(sources_dict.values()), columns=['source_name'], index=list(sources_dict.keys()))
-    sourceid = s_df[s_df['source_name'].isin(source_list)]
+    sourceid = s_df[s_df['source_name'].isin(sources)]
+    
     return list(sourceid.index)
 
 def sources(hdul):
@@ -167,15 +168,13 @@ def __sel_ind(data):
     grouped_data=data[ind]
     return grouped_data
 
-
-
 def _return_target(sdict):
     """
     TODO: group by occurance of phaseref combination, as the cov is affected by indices
     """
     compare_val,phrefs=[],[]
     for s in sdict['phref']:
-            compare_val.append(np.std(sdict['phref'][s])/np.mean(sdict['phref'][s])*100) #coeff of variab check for indices
+            compare_val.append(np.std(sdict['phref'][s])/np.mean(sdict['phref'][s])*100)            #coeff of variab check for indices
             phrefs.append(s)
     ind=np.argsort(compare_val)
     phrefs=(np.array(phrefs)[ind])
@@ -262,7 +261,7 @@ def find_first_occurrence(arr, sequence, occured_freq=1):
     occurrences = [i for i in range(len(arr) - sequence_length + 1) if set(arr[i:i+sequence_length]) == sequence_set]
 
     if len(occurrences)>occured_freq:
-        first_occurrence_index = occurrences[0]     # Find the index of the first occurrence
+        first_occurrence_index = occurrences[0]                                                     # Find the index of the first occurrence
     return first_occurrence_index
     
 def identify_sources(fitsfile):
@@ -342,7 +341,7 @@ def id_flux_for_sources(hdul, sources, rfcfile, dataframe=True):
     res = search_sources(sources, rfcfile)[['IVS name', 'J2000 name', f'{band}_T-', f'{band}_Tot']]
     nsources = [source[:9] for source in sources]
     ivsname, j2name, m, flux = res.values.T
-    j2name = [j2n.replace('J', '') for j2n in j2name]
+    j2name = [j2n[1:] if j2n[0]=='J' else j2n for j2n in j2name]
 
     dic = {}
     for s,source in enumerate(nsources):
@@ -417,29 +416,56 @@ def find_calibrators(hdul, calib_ids=[]):
     tsys1        =   tsys_rec[str_ts1]
     tsys2        =   tsys_rec[str_ts2] if str_ts2 in tsys_rec.columns.names else None
 
-    calib        =   {}
+    
     calids = calib_ids if len(calib_ids) else list(sources_dict.keys())
 
     for c in calids:
-        tsys1_std.append(np.nanstd(np.nanmean(tsys_rec[tsys_rec[sid_colname]==c][str_ts1], axis=0)))
-        if len(tsys1)==len(tsys2) : tsys2_std.append(np.nanstd(np.nanmean(tsys_rec[tsys_rec[sid_colname]==c][str_ts2], axis=0)))
-        else: tsys_std = tsys1_std
-    tsys_std    =   np.nanmean([tsys1_std, tsys2_std], axis=0)
+        std_tsys_v = np.nanstd(np.nanmean(tsys_rec[tsys_rec[sid_colname]==c][str_ts1], axis=0))     # takes mean of all the IFs and std of all the values for the possible calibrator
+        tsys1_std.append(std_tsys_v) 
+        tsys2_std.append(np.nanstd(np.nanmean(tsys_rec[tsys_rec[sid_colname]==c][str_ts2], axis=0)) if tsys2 is None else std_tsys_v ) 
+        
+    tsys_std    =   np.nanmean([tsys1_std, tsys2_std], axis=0)                                      # mean for non-tsys2 case is still valid because std_tsys1 = std_tsys2 in that case
     tsys_df     =   df(tsys_std, index=calids, columns=['std_tsys'])
     tsys_df     =   tsys_df.sort_values(by=['std_tsys'],ascending=[True])
+    tsys_df.loc[:, 'sources'] =   source_df
+#     
+    return tsys_df
 
-    calib['calibrators_instrphase'] = calib['calibrators_bandpass'] = list(source_df['source_name'][tsys_df.index[:2]])
 
+def identify_calibrators_from_flux(hdul, flux_df, calib_ids=[]):
+    """
+    find calib from TSYS and flux info
+    """
+    calib_df = find_calibrators(hdul, calib_ids)
+#     if not flux_df.empty: 
+    calib_df.loc[:, 'flux'] = flux_df
+    fx = calib_df['flux'] = calib_df['flux'].fillna(0)
+    ts = calib_df['std_tsys']
+    ts_p = (1-np.log(ts)/ts.max())
+    ts_w, fx_w = 1,1
+    calib_df.loc[:, 'c'] = (ts_p*ts_w+fx*fx_w)/(ts_w+fx_w)
     
+    return calib_df.sort_values(by=['c'], ascending=[False])
+
+def identify_calibrators(hdul, flux_df, calib_ids=[]):
+    """
+    write dictionary after finding calib from TSYS and flux info
+    """
+    calib         =   {}
+    
+    
+    _calib_df     =  find_calibrators(hdul, calib_ids) if flux_df is None else identify_calibrators_from_flux(hdul, flux_df, calib_ids=[])
+    
+    calib['calibrators_instrphase'] = calib['calibrators_bandpass'] = list(_calib_df['sources'][:2])
     return calib
 
-def identify_sources_fromtarget(fitsfile, target_source, rfcfile=None, verbose=False):
+def identify_sources_fromtarget(fitsfile, target_source, rfcfile=None, verbose=False, flux_df=None):
     t = Targets(fitsfile)
     s = identify_sources(fitsfile)
     
     isphref, dic = t.check_phaseref
-    
-    calib_candidates = set()
+    sources_dict = sources(t.hdul)
+    calib_candidates = set() # TODO: check efficiency
     calib_candidates.update(s['calibrators_instrphase'])
     
     allsources=set()
@@ -462,15 +488,16 @@ def identify_sources_fromtarget(fitsfile, target_source, rfcfile=None, verbose=F
             else:
                 calib_candidates.update(s['calibrators_phaseref'])
 
-        if not isphref:
-            
+        if not isphref:            
             s['science_target'] = [target_source]
             if target_source in s['calibrators_instrphase']:
                 s['calibrators_bandpass'].remove(target_source)
                 s['calibrators_instrphase'].remove(target_source)
-
-    id_calib_candidates = get_sources_id(t.hdul, calib_candidates)
-    calib = find_calibrators(t.hdul, id_calib_candidates)
+    if flux_df is None: 
+        flux_df = id_flux_for_sources(t.hdul, t.sources_list, rfcfile) if rfcfile else id_flux_for_sources(t.hdul, t.sources_list, True)
+    id_calib_candidates = get_sources_id(sources_dict, calib_candidates)
+    calib = identify_calibrators(t.hdul, flux_df ,id_calib_candidates)
+        
     s.update(calib)
     return s
 
@@ -645,7 +672,7 @@ class Targets:
         
         self.check_phaseref         =   check_phaseref(self.scanlist_arr)
 
-    def find_nearby_source(self, SOURCE, target_source):
+    def find_nearby_source(self, target_source):
         """
         use coordinate information in SOURCE table to look for nearest source
         returns source_name, 2d_sky_distance
