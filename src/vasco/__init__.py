@@ -269,7 +269,7 @@ def cli():
                 s               =   identify_sources_fromsnr_ms(msname, target_source=target, 
                                                                 caliblist_file=rfc_find(write=False), 
                                                                         snr_metafile=sourcesf, outfile=output_file,
-                                                                        flux_thres=18.0, min_flux=8.0,ncalib=5)
+                                                                        flux_thres=18.0, min_flux=8.0,ncalib=6)
                 print(s)
             else:
                 for fitsfile in input_file:
@@ -292,7 +292,7 @@ def cli():
                         from vasco.ms import identify_sources_fromtarget_ms
 
                         if sources: 
-                                s_dict = identify_sources_fromtarget_ms(vis, sources[0], rfc_find(write=False))
+                                s_dict = identify_sources_fromtarget_ms(vis, sources[0], rfc_find(write=False), metafolder=metafolder)
                                 for band, sources_d in s_dict.items():
                                     print(band, "band")
                                     print(sources_d)
@@ -310,10 +310,11 @@ def cli():
                         with open(f'{metafolder}/refants_fits.out', 'w') as vrm: vrm.write(print_outs)
                     # print(refant_dict)
                 else:
-                    from vasco.ms import identify_refant_casa
+                    from vasco.ms.fringefit import identify_refant_ms
                     vis = fitsfile
                     print(vis)
-                    refants, calibs, print_outs         =   identify_refant_casa(str(vis), new_tbls=new_tbls, new_meta=new_meta, mpi=mpi, sources=sources, refants=ants, spws=spws, verbose=True)
+                    refants, calibs, print_outs         =   identify_refant_ms(str(vis), new_tbls=new_tbls, new_meta=new_meta, mpi=mpi, target=sources[0], 
+                                                                                 selected_sources=sources, refants=ants, spws=spws, verbose=True)
                     refant_dict = {'refants': refants}
                     with open(f'{metafolder}/sources.vasco', 'w') as vrm: json.dump(calibs, vrm)
                     with open(f'{metafolder}/refants.vasco', 'w') as vrm: json.dump(refant_dict, vrm)

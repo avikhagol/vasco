@@ -2,11 +2,31 @@ from pathlib import Path
 import os, ast
 from os import path, makedirs
 from pyvirtualdisplay import Display
+import requests
+import pyvo as vo
 # from casatools import logsink
 
 # vascolog=logsink('vasco.log')
 # vascolog.setlogfile='vasco.log'
 # vascolog.setglobal(True)
+
+def vlba_tap_query(target_name='', sel='TOP 5 s_ra,s_dec,access_url', where='', table='tap_schema.obscore'):
+    service =vo.dal.TAPService("https://data-query.nrao.edu/tap") 
+    _wh = f"""WHERE target_name='{target_name}'""" if target_name else f"""WHERE {where}"""
+    q = f"""
+    SELECT {sel}
+    FROM {table}
+    """ + _wh
+    print(q)
+    result = service.search(q)
+    return result
+
+
+def query_vlba(proj,fits,target_name):
+    return vlba_tap_query(
+    sel='DISTINCT TOP 10 s_ra,s_dec,freq_max,instrument_name,project_code,access_url,pol_states', 
+    where=f"project_code='{proj}' AND instrument_name='VLBA' AND (access_url LIKE  '%{fits}%') AND target_name='{target_name}'"
+    )
 
 def get_functionnames(modulefile=None,module=None, match=''):
     """

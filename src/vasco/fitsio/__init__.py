@@ -181,9 +181,13 @@ def find_calibrators_from_tsys(t, calib_ids=[]):
         sids_present = tsys_arr.read()['SOURCE_ID']
 
     for c in calids:
-        std_tsys_v=np.std(np.nanmean(tsys_arr[tsys_arr.where(f"{sid_colname}=={c}")][str_ts1], axis=1)) if c in sids_present else 0     # takes mean of all the IFs and std of all the values for the possible calibrator
-        tsys1_std.append(std_tsys_v) 
-        tsys2_std.append(np.std(np.nanmean(tsys_arr[tsys_arr.where(f"{sid_colname}=={c}")][str_ts2], axis=1)) if (tsys2 is not None) and (c in sids_present) else std_tsys_v )
+        if len(np.shape(tsys_arr[tsys_arr.where(f"{sid_colname}=={c}")][str_ts1]))>1:           # HACK: For Mult-IF : This condition makes it work on datasets with single and multiple IF
+            std_tsys_v=np.std(np.nanmean(tsys_arr[tsys_arr.where(f"{sid_colname}=={c}")][str_ts1], axis=1)) if c in sids_present else 0     # takes mean of all the IFs and std of all the values for the possible calibrator
+            tsys2_std.append(np.std(np.nanmean(tsys_arr[tsys_arr.where(f"{sid_colname}=={c}")][str_ts2], axis=1)) if (tsys2 is not None) and (c in sids_present) else std_tsys_v )
+        else:                                                                                   # for single IF
+            std_tsys_v=np.std(tsys_arr[tsys_arr.where(f"{sid_colname}=={c}")][str_ts1]) if c in sids_present else 0
+            tsys2_std.append(np.std(tsys_arr[tsys_arr.where(f"{sid_colname}=={c}")][str_ts2]) if (tsys2 is not None) and (c in sids_present) else std_tsys_v )
+        tsys1_std.append(std_tsys_v)         
         
     tsys_std    =   np.nanmean([tsys1_std, tsys2_std], axis=0)                                      # mean for non-tsys2 case is still valid because std_tsys1 = std_tsys2 in that case
     tsys_df     =   df(tsys_std, index=calids, columns=['std_tsys'])

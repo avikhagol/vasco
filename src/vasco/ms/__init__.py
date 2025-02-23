@@ -21,29 +21,30 @@ from pandas import DataFrame as df
 
 import glob
 
-from vasco.util import read_inputfile, latest_file
-from vasco.sources import check_band, identify_sources_fromtarget
-from vasco import c
-from vasco.diag import df_baseline_by, pl_diag
+from vasco.util import read_inputfile, latest_file, save_metafile, read_metafile
+from vasco.sources import check_band, identify_sources_fromtarget, choose_calib_for_snr_rating
+from scipy.spatial import distance
 
-from casampi.MPICommandClient import MPICommandClient
+from vasco import c
+from vasco.diag import get_avg_amp_phase, pl_diag
+from vasco.ms.fringefit import start_mpi
+
 
 msmd=msmetadata()
 tb = table()
 
 SNR_THRES = 7.0
 
-def start_mpi():
-    try:
-        client = MPICommandClient()
-        client.start_services()
-        client.set_log_mode('redirect')
-        # client.set_log_level('SEVERE') does not work
-        # and neither does casalog.filter('SEVERE') :(
-        client.set_log_level('INFO4')
-    except RuntimeError:
-        client = False
-    return client
+
+
+def get_tb_data(vis, axs=[]):
+    tb.open(vis)
+    res = []
+    if len(axs):
+        for ax in axs:
+            res.append(tb.getcol(ax))
+    tb.close()
+    return res
 
 def select_long_scans(field_id, fields, scan_df):
     """
@@ -76,38 +77,122 @@ def vals_fromtab(caltable):
 
     return snr,an1,an2,time,scan,fid,flag
 
+def get_sci_ant(vis, tbls, target, msmd=None):
+    tb = table()
+    msm                =   None
+    field_id           =   None
+    antid              =   []
+    if not msmd: 
+        msm = msmetadata()
+        
+    else:
+        msm = msmd
+    
+    msm.open(vis)
+    field_id = msm.fieldsforname(target)[0]    
+    
+    if tbls:
+        for tbl in tbls:
+            tb.open(tbl)
+            tbl_antid             =   tb.getcol('ANTENNA1')[np.where(tb.getcol('FIELD_ID')==field_id)]
+            if not len(antid):antid =   tbl_antid
+            antid                 =   np.intersect1d(antid, tbl_antid)
+    
+    ants = msm.antennanames(np.unique(antid)) if len(antid) else []
+    if not msmd: msm.close()
+    return ants, antid
+
+def get_calib_df_sorted_desc(vis, tbls, target, calibs, msmd=None, dic=False):
+    tb = table()
+    calib_dic          =   {}
+#     calib_df           =   df(data=[], colum)
+    msm                =   None
+    field_id           =   []
+    
+    if not msmd: 
+        msm = msmetadata()
+            
+    else:
+        msm = msmd
+    
+    msm.open(vis)
+    for calib in calibs:
+        if calib!=target:
+            antid              =   []
+            field_id           =   msm.fieldsforname(calib)[0]
+            calib_dic[field_id]=   {}
+            calib_dic[field_id]['source'] = calib
+            if tbls and field_id:
+                for tbl in tbls:
+                    tb.open(tbl)
+                    tbl_antid             =   tb.getcol('ANTENNA1')[np.where(tb.getcol('FIELD_ID')==field_id)]
+                    if not len(antid):antid =   tbl_antid
+                    antid                 =   np.intersect1d(antid, tbl_antid)
+
+            ants = msm.antennanames(np.unique(antid)) if len(antid) else []
+            calib_dic[field_id]['antennas'] = ants
+    if not msmd: msm.close()
+    if dic:
+        return calib_dic
+    else:
+        return df.from_dict(calib_dic, orient='index')
+
 def ants_intbls_unique(vis=None, msmd=None, tbls=None):
     
     tb = table()
     antid, msm                =   [], None
-    
-    for tbl in tbls:
-        tb.open(tbl)
-        tbl_antid             =   tb.getcol('ANTENNA1')
-        if not len(antid):antid =   tbl_antid
-        antid                 =   np.intersect1d(antid, tbl_antid)
+    if tbls:
+        for tbl in tbls:
+            tb.open(tbl)
+            tbl_antid             =   tb.getcol('ANTENNA1')
+            if not len(antid):antid =   tbl_antid
+            antid                 =   np.intersect1d(antid, tbl_antid)
     if not msmd: 
         msm = msmetadata()
         msm.open(vis)
     else:
         msm = msmd
-    ants = msm.antennanames(np.unique(antid))
+    ants = msm.antennanames(np.unique(antid)) if len(antid) else msmd.antennanames()
     if not msmd: msm.close()
     return ants, antid
 
-def fringefit_for_refant_fields(vis, caltable, fields, refants, sources, spws, gaintable, scan_df, mpi):
+def fringefit_for_refant_fields(vis, caltable, fields, refants, sources, spws, gaintable, scan_df, mpi, target=''):
+    """"
+    TODO: 
+    all_sci_avail_ants = check all the ants available on science 
+    find good_calibrator = {
+        0. Calibrator with all sci_ants + above SNR_THRES
+        1. calibrators_list = such that: combination([calibrator_covering avail_ants]) == all_sci_avail_ants
+        1.1 : choose antennas still from the TSYS table.
+        2. the current approach of rating calibrator based on the first refant is bad, use refant such that all_sci_avail_ants are present.
+        3. The refant selection should be based on baseline i.e ANTENNA1-ANTENNA2 containing preferred refant
+    }
+    unflagged data from calibrator sources
+
+
+    NEW: 
+    calibs + target == sources (input parameter)
+    """
     print("..doing FFT")
     tbl_names, status, err          =   [], True, ''
     
     msmd.open(vis)
-    MPICLIENT = start_mpi()
-    success = False
+    MPICLIENT                       =   start_mpi()
+    success                         =   False
     ants_with_solution, anid        =   ants_intbls_unique(msmd=msmd, tbls=gaintable)
     refants                         =   np.intersect1d(ants_with_solution, refants)
     d_fields                        =   {}
-    # print(refamts, )
+    
+    if target:
+        all_sci_ant, ant_id         =   get_sci_ant(vis, gaintable, target, msmd=msmd)
+        calibrator_df_sorted_desc   =   get_calib_df_sorted_desc(vis, gaintable, target, calibs=sources, msmd=msmd)
+        sel_calibrator, remain_ant  =   choose_calib_for_snr_rating(all_sci_ant, calibrator_df_sorted_desc, n_ant=9)
+    
+        sources                         =   sel_calibrator + [target]
+        if remain_ant:
+            print(f"{c['r']}{remain_ant} was not found in any Calibrator Sources:{c['x']} {sel_calibrator}")
+
     try:
-        # print(refants, ants_with_solution, anid)
         for refant in refants:        
             for fid in fields:
                 field_name  = fields[fid]['name']
@@ -147,7 +232,7 @@ def fringefit_for_refant_fields(vis, caltable, fields, refants, sources, spws, g
                                 solint='inf', zerorates=True,
                                 refant=refant, minsnr=3, 
                                 gaintable=gt,
-                                interp=['nearest', 'nearest', 'nearest,nearest'],
+                                interp=['nearest,nearest'],
                                 globalsolve=False, 
                                 docallib=False, 
                                 parang=False,
@@ -296,39 +381,72 @@ def df_fromtables(tbl_names):
     # print(df_tb)
     return df_tb
 
-def df_fromtb(tbls):
+def df_fromtb(vis, tbls, msmd):
     """
+    TODO: following is outdated.
     returns dataframes containing:
     "ANTENNA2", "SNR_median", "FIELD_ID", "SNR_FIELD"
-    
+
     CASA uses "ANTENNA2" as the reference antenna used for the table.
     """
+    tb_ant = table()
+    tb_tsys = table()
+    tb_ant.open(f'{vis}/ANTENNA')
+    tb_tsys.open(f"{vis}/SYSCAL")
+    
+    an_dict = {}
+    
+    xyz = list(zip(*tb_ant.getcol('POSITION')))
+    an = tb_ant.getcol('NAME')
+    tsys_anid = tb_tsys.getcol('ANTENNA_ID')
+    tsys_vals = tb_tsys.getcol('TSYS')
+    
+    for i,an in enumerate(an):
+        i_anid = msmd.antennaids(an)[0]
+        
+        # calculating TSYS variability
+        tsys_std = []
+        for tsys_val in tsys_vals:
+            itsys = np.where(tsys_anid==i_anid)
+            tsy_an_std = np.nanstd(tsys_val[itsys]) if len(itsys) else np.float('nan')
+            tsys_std.append(tsy_an_std)
+        
+        an_dict[msmd.antennaids(an)[0]]={'ANNAME': an}
+        an_dict[i_anid]['STD_TSYS']= np.nanmean(tsys_std)
+        
+        # measuring centroid distance
+        d=[]
+        refcoord=xyz[i]
+        for v in xyz:
+            d.append(distance.euclidean(refcoord,v)*.001)                                       # Distance of all from one refant
+        an_dict[i_anid]['d']=np.nanmedian(d)   # Median distance of all ants for one refant
+    
     tbd = df_fromtables(tbls)
+    tb_ant.done()
+    
+    
     i,j=0,0
     df_o = tbd.loc[tbd['ANTENNA1']!=tbd['ANTENNA2']]
-    df_o_flagged = df_o.loc[df_o['FLAG']==False]
-    
+    df_o_unflagged = df_o.loc[df_o['FLAG']==False]
+
     for fid in tbd['FIELD_ID'].unique():
-        tbd_source = df_o_flagged.loc[df_o_flagged['FIELD_ID']==fid]
+        tbd_source = df_o_unflagged.loc[df_o_unflagged['FIELD_ID']==fid]
         for refant in tbd_source['ANTENNA2'].unique():
             refant_snr = tbd_source.loc[tbd_source['ANTENNA2']==refant]['SNR']
             refant_snr_max = refant_snr.max()
-            # if refant_snr_max>SNR_THRES:
-            #     refant_snr  = refant_snr.loc[refant_snr>SNR_THRES]
-
-                # refant      =   refant[[refant_snr.index]]
-                # fid         =   fid[[refant_snr.index]]
-                # tbd_source  =   tbd_source[[refant_snr.index]]
-            tb_data=[[refant, refant_snr.median(), refant_snr.mean(),refant_snr_max, fid, tbd_source.SNR.median()]]      # median value for all scans
+            dist = an_dict[refant]['d']
+            anname = an_dict[refant]['ANNAME']
+            std_tsys = an_dict[refant]['STD_TSYS']
+            tb_data=[[refant, anname, refant_snr.median(), refant_snr.mean(),refant_snr_max, fid, tbd_source.SNR.median(),dist, std_tsys]]      # median value for all scans
             if i==0:
                 df_field_ant = df(tb_data,
-                                 columns=["ANTENNA2", "SNR_median", "SNR_mean", "SNR_max", "FIELD_ID", "SNR_FIELD"])
+                                 columns=["ANTENNA2", "ANNAME", "SNR_median", "SNR_mean", "SNR_max", "FIELD_ID", "SNR_FIELD", "d", "STD_TSYS"])
                 i=1
             else:
                 new_df       = df(tb_data,
-                                 columns=["ANTENNA2", "SNR_median", "SNR_mean", "SNR_max", "FIELD_ID", "SNR_FIELD"])
+                                 columns=["ANTENNA2", "ANNAME", "SNR_median", "SNR_mean", "SNR_max", "FIELD_ID", "SNR_FIELD", "d", "STD_TSYS"])
                 df_field_ant = pdconc([df_field_ant, new_df], ignore_index=True)
-    
+    tb_ant.done()
     return df_field_ant
 
 def flagsummary(vis, **kwargs):
@@ -336,15 +454,6 @@ def flagsummary(vis, **kwargs):
                 #  name=self.name, 
                  fieldcnt=True, basecnt=True, **kwargs, )
       return d
-
-def save_metafile(metafile, metad):
-    with open(str(metafile), 'w') as mf: json.dump(metad, mf)
-
-def read_metafile(metafile):
-    with open(metafile, 'r') as sf:
-        metad                       =   sf.read()
-        meta                        =   json.loads(metad)
-    return meta
 
 def splitms_mpi(vis, outvis, fids):
 
@@ -362,6 +471,22 @@ def listobs_mpi(vis, overwrite, listfile, verbose):
     return res[0]['ret']
 
 def load_metadata(vis, metafile, refants=None, spws=None, sources=None, determine=False, mpi=False):
+    """_summary_
+    
+    TODO: use msmd or ms casatools
+
+    Args:
+        vis (_str_): _name of the visibility file_
+        metafile (_str_): _path of the metafile_
+        refants (_list_, optional): _list of Antenna names for refants_. Defaults to None.
+        spws (_list_, optional): _spectral window ids_. Defaults to None.
+        sources (_list_, optional): _field names_. Defaults to None.
+        determine (bool, optional): _whether to determine the metadata or load the older one if found_. Defaults to False.
+        mpi (bool, optional): _use of MPI_. Defaults to False.
+
+    Returns:
+        _dict_: _dictionary of metadata_
+    """
     if (not Path(metafile).exists()) or determine:
         if not sources: sources = []
         
@@ -398,7 +523,7 @@ def load_metadata(vis, metafile, refants=None, spws=None, sources=None, determin
     return meta
 
     
-def ff_to_tbl_names(vis, meta, metafile, refants=None, sources=None, spws=None, gaintable=None, new_tbls=False, mpi=False):
+def ff_to_tbl_names(vis, meta, metafile, refants=None, sources=None, spws=None, target='', gaintable=None, new_tbls=False, mpi=False):
     """
     
     """
@@ -417,7 +542,9 @@ def ff_to_tbl_names(vis, meta, metafile, refants=None, sources=None, spws=None, 
     td                          =   Time(sp.t1, format='mjd')-Time(sp.t0, format='mjd')
     sp['td']                    =   TimeDelta(td, format='jd').sec
     
-    if not gaintable: gaintable =   [f'{wd}/calibration_tables/accor.t',f'{wd}/calibration_tables/gc.t',f'{wd}/calibration_tables/tsys.t']
+    if not gaintable: 
+        gaintable               =   [f'{wd}/calibration_tables/accor.t',f'{wd}/calibration_tables/gc.t',f'{wd}/calibration_tables/tsys.t']
+        gaintable               =   [gt for gt in gaintable if Path(gt).exists()]
     
     #   fringefit for each refant for each source
     
@@ -428,59 +555,60 @@ def ff_to_tbl_names(vis, meta, metafile, refants=None, sources=None, spws=None, 
             raise SystemExit(f"{c['r']} Failed! couldn't find tables{c['x']}")
     else:
         Path(fft_tb).mkdir(exist_ok=True, parents=True)
-        tbl_names               =   fringefit_for_refant_fields(vis, fft_tb, fields, refants, sources, spws, gaintable, sp, mpi)
+        tbl_names               =   fringefit_for_refant_fields(vis, fft_tb, fields, refants, sources, spws, gaintable, sp, mpi, target=target)
         meta['fft_tb'] = fft_tb
     save_metafile(metafile, meta)
     return tbl_names
 
-def find_refant_fromtbls(vis, tbls, fields,verbose=False):
+def find_refant_fromtbls(vis, tbls, fields, verbose=False, wt_d=1.0, wt_snr=0.9, wt_tsys=0.8):
     """
     finds refants from Short Fringe Fit tables
     """
-    df_field_ant = df_fromtb(tbls)
+    SNR_UPPER_LIMIT                         =   380
+    msmd.open(vis)
+
+    df_field_ant                            =   df_fromtb(vis, tbls, msmd)
     n_ant                                   =   4
     print_tbls                              =   """ """
-    msmd.open(vis)
-    # TODO: remove antenna without any scans
-    ants = msmd.antennanames()
-    antsid = msmd.antennaids(name=ants)
-    ants_dict = dict(zip(antsid, ants))
-    
+
     msmd.done()
-    
+
     fields_dict = {}
-    
+
     for fid in fields.keys():
         fields_dict[int(fid)] = fields[fid]['name']
-    
-    df_field_ant.loc[:,'ANNAME']            =   df_field_ant['ANTENNA2'].map(ants_dict)
+
     df_field_ant_sorted                     =   df_field_ant.sort_values(by=["SNR_median"], ascending = False)
     
-    
+
     df_field_ant                            =   df_field_ant.loc[df_field_ant['SNR_median']>SNR_THRES]
+    std_tsys                                =   df_field_ant['STD_TSYS']
+
+    p_ofd                       =   (1-(df_field_ant['d']/df_field_ant['d'].max()))
+    p_ofsnr                     =   (df_field_ant.SNR_median.clip(upper=SNR_UPPER_LIMIT)/SNR_UPPER_LIMIT) if df_field_ant.SNR_median.max()>SNR_UPPER_LIMIT else (df_field_ant['SNR_median']/df_field_ant['SNR_median'].max())
+    p_oftsys                    =   (1-(std_tsys/std_tsys.max()))
     
-    ant_sorted                              =   df_field_ant.groupby('ANNAME').median().sort_values(by=['SNR_median'], ascending=False)
+    df_field_ant.loc[:, 'p']    =   ((p_ofd*wt_d)+(p_ofsnr*wt_snr)+(p_oftsys*wt_tsys))/(wt_d+wt_snr+wt_tsys)
     
+    df_field_ant_sorted                     =   df_field_ant.sort_values(by=['p'], ascending=False)
+    df_field_ant_sorted.rename(columns={'ANTENNA2':'AN_ID'}, inplace=True)
     df_field_ant_sorted['FIELD_NAME']       =   df_field_ant_sorted['FIELD_ID'].map(fields_dict)
-    ant_sorted                              =   ant_sorted.drop(columns=['FIELD_ID', 'SNR_FIELD'])
-
-    ant_sorted.rename(columns={'SNR_median':'SNR_median', 'ANTENNA2':'ID'}, inplace=True)
-    ant_sorted['ID']=ant_sorted['ID'].astype('Int64')
-    refants_final = list(ant_sorted.index.values[:n_ant])        
-
-    ant_selected = df_field_ant_sorted.loc[df_field_ant_sorted['ANNAME'].isin(ant_sorted.index[:1])]
-    ant_selected = ant_selected[['ANNAME', 'SNR_median', 'FIELD_ID', 'FIELD_NAME' , 'SNR_FIELD']].sort_values(by=['SNR_FIELD'], ascending=False)
-    ant_selected= ant_selected.set_index('FIELD_ID')
-
-    print_tbls += df_field_ant_sorted.to_string()   + "\n"
-    print_tbls += ant_sorted.to_string()            + "\n"
-    print_tbls += ant_selected.to_string()
-
-    snr_thres_for_calib = SNR_THRES
-    ant_to_calib = ant_selected[['FIELD_NAME', 'SNR_FIELD']]
-    calibs = ant_to_calib[ant_to_calib['SNR_FIELD']>snr_thres_for_calib].to_dict('list')
+    
+    refants_final               =   list(df_field_ant_sorted['ANNAME'].unique())[:n_ant]
+    calibs                                  =   df_field_ant_sorted[df_field_ant_sorted['ANNAME'].isin(refants_final)]
+    
+    calibs.index                            =   calibs['FIELD_ID'].values
+    calibs                                  =   calibs[['FIELD_NAME', 'SNR_FIELD']]
+    
+    calibs                                  =   calibs.drop_duplicates(['FIELD_NAME'])
+    
+    calibs_final                =   calibs[calibs['SNR_FIELD']>SNR_THRES]
+    calibs_final                =   calibs_final.to_dict('list')
+    
+    print_tbls                              +=  df_field_ant_sorted.to_string() + "\n"
+    print_tbls                              +=  calibs[calibs['SNR_FIELD']>SNR_THRES].to_string()
     if verbose: print(print_tbls)
-    return refants_final, calibs, print_tbls
+    return refants_final, calibs_final, print_tbls
 
 def params_check(vis, sources, refants, spws, ff_tbls, new_meta, new_tbls, mpi):
     """
@@ -488,18 +616,16 @@ def params_check(vis, sources, refants, spws, ff_tbls, new_meta, new_tbls, mpi):
     - loads metadata
     """
     wd = Path(vis).parent
-    wd_ifolder = str(wd.absolute() / 'input_template/')
-    caltab = str(wd / 'calibration_tables/')
     
     if not refants or not refants[0]:
         msmd.open(vis)
         refants         =   msmd.antennanames()
         msmd.done()
     meta = None
-    for folder in [wd_ifolder, caltab]:
-        if not Path(folder).exists():
-            raise FileNotFoundError(f"Expected '''{folder}''' not found") 
-    d, _,_ = read_inputfile(wd_ifolder, 'array.inp')
+    # for folder in [wd_ifolder, caltab]:
+    #     if not Path(folder).exists():
+    #         raise FileNotFoundError(f"Expected '''{folder}''' not found") 
+    # d, _,_ = read_inputfile(wd_ifolder, 'array.inp')
 
     metafile = str(wd / 'vasco.meta' / 'msmeta_snrrating.vasco')
     Path(metafile).parent.mkdir(exist_ok=True, parents=True)
@@ -520,7 +646,7 @@ def params_check(vis, sources, refants, spws, ff_tbls, new_meta, new_tbls, mpi):
     print("params check done..")
     return refants, ff_tbls, new_meta, new_tbls, meta, metafile
 
-def identify_refant_casa(vis, sources=None, refants=None, spws=None, ff_tbls=None, new_meta=False, new_tbls=False, mpi=False, verbose=True):
+def identify_refant_casa(vis, selected_sources=None, refants=None, spws=None, target='', ff_tbls=None, new_meta=False, new_tbls=False, mpi=False, verbose=True):
     """
     Returns
     refant_list, calib_dictionary
@@ -529,15 +655,15 @@ def identify_refant_casa(vis, sources=None, refants=None, spws=None, ff_tbls=Non
     :calib_dictionary:  {'FIELD_NAME': [sources], {'SNR_FIELD':[snr_sources]}}
                         snr_sources: median values of all scans, antennas in the field
     """
-    if not sources:
-        sources=None
+    if not selected_sources:
+        selected_sources=None
     print("..short FFT for refant and calibrator sources")
-    refants, ff_tbls, new_meta, new_tbls, meta, metafile = params_check(vis=vis, sources=sources, refants=refants, spws=spws, ff_tbls=ff_tbls, new_meta=new_meta, new_tbls=new_tbls, mpi=mpi)
+    refants, ff_tbls, new_meta, new_tbls, meta, metafile = params_check(vis=vis, sources=selected_sources, refants=refants, spws=spws, ff_tbls=ff_tbls, new_meta=new_meta, new_tbls=new_tbls, mpi=mpi)
     # print(new_tbls, "new_tbls")
     if not ff_tbls: 
         print("finding tables..")
         try:
-            ff_tbls = ff_to_tbl_names(vis, meta, metafile, refants=refants, sources=sources, spws=spws, new_tbls=new_tbls, mpi=mpi)
+            ff_tbls     =   ff_to_tbl_names(vis, meta, metafile, refants=refants, sources=selected_sources, spws=spws, target=target, new_tbls=new_tbls, mpi=mpi)
         except Exception as e:
             print("Exception occured!!!","\n\n",str(e))
     print("tables collected..")
@@ -631,7 +757,7 @@ def get_target_in_bands(msmd, target, bands_dict):
     spws = msmd.spwsforfield(target)
     bands = []
     for band in bands_dict:
-        if all(spw_band in list(spws) for spw_band in list(bands_dict[band]['spws'])):
+        if all(spw_band in list(bands_dict[band]['spws']) for spw_band in list(spws)):
             bands.extend([band])
         else:
             print(f"{target} is not in {band} band", spws)
@@ -655,17 +781,17 @@ def coordinate_for_target(vis, target, sourcenames):
     c = coordinate_for_sources(vis, sourcenames)
     # idx_target = list(c.keys()).index(target)
     sv = c.pop(target, None)
-    sv = SkyCoord(sv[0]*u.rad,sv[1]*u.rad)
+    sv = SkyCoord(sv[0]*u.rad,sv[1]*u.rad) if sv else None
     
     r, d = list(zip(*c.values()))
     oth = SkyCoord(r*u.rad,d*u.rad)
     
     return oth, list(c.keys()), sv
 
-def identify_sources_fromtarget_ms(vis, target_source, caliblist_file=None, msmd=msmd, flux_thres=0.150, min_flux=0.025, ncalib=9, flux_df=None, sourcenames=None, hard_selection=False):
+def identify_sources_fromtarget_ms(vis, target_source, caliblist_file=None, msmd=msmd, flux_thres=0.150, min_flux=0.025, ncalib=9, flux_df=None, sourcenames=None, hard_selection=False, metafolder=None):
     
-    
-    metafile                                =   Path(vis).parent / 'vasco.meta' / 'msmeta_sources.vasco'
+    if metafolder is None: metafolder       =   Path(vis).parent / 'vasco.meta'
+    metafile                                =   Path(metafolder)  / 'msmeta_sources.vasco'
     msmd.open(vis)
 
     if not sourcenames : sourcenames        =   get_sourcenames(msmd)
@@ -707,13 +833,16 @@ def identify_sources_fromsnr_ms(vis, target_source, caliblist_file=None, snr_met
     s_df                                    =   df(data=sourcenames.values(), index=sourcenames.keys(), columns=['source_name'])
     mf_df                                   =   df.from_dict(mf_dic)
     mf_df                                   =   mf_df.rename(columns={'FIELD_NAME':'source_name', 'SNR_FIELD':'flux'})
+    
+    mf_df.loc[:,'FIELD_ID']                 =   [int(s_df.loc[s_df['source_name']==sname].index.values[0]) for sname in mf_df['source_name']]
 
+    mf_df                                   =   mf_df.drop_duplicates()
+    mf_df                                   =   mf_df.set_index('FIELD_ID')
     mf_df                                   =   s_df.merge(mf_df, on='source_name', how='left')
     flux_df                                 =   df(mf_df['flux'])
-    
     sd = identify_sources_fromtarget_ms(vis, target_source, caliblist_file=caliblist_file, 
                                 msmd=msmd,
-                                flux_thres=flux_thres, min_flux=min_flux,ncalib=ncalib, flux_df=flux_df, sourcenames=sourcenames, 
+                                flux_thres=flux_thres, min_flux=min_flux, ncalib=ncalib, flux_df=flux_df, sourcenames=sourcenames, 
                                 hard_selection=True)
     if not outfile: outfile = str(Path(vis).parent / 'vasco.meta' / 'sources_ms_snr.vasco')
     save_metafile(outfile, sd)
@@ -750,20 +879,20 @@ def split_ms(vis, outvis, source_list=[], fids=[], mpi=False):
 # ---------- Diagnostics -----------
 
 
-def sel_by_baseline(vis, **kwargs):
+# def sel_by_baseline(vis, **kwargs):
     
-    tb.open(vis)
-    ij = tb.getcol('ANTENNA1'),tb.getcol('ANTENNA2')
-    baseline_seq = ((ij[0]+1)*256) + (ij[1]+1)
-    allbaselines = np.unique(baseline_seq)
-    tb.done()
-    tb.open(f"{vis}/ANTENNA")
-    annames = tb.getcol('NAME')
-    xyz =list(zip(*tb.getcol('POSITION')))
-    tb.done()
+#     tb.open(vis)
+#     ij = tb.getcol('ANTENNA1'),tb.getcol('ANTENNA2')
+#     baseline_seq = ((ij[0]+1)*256) + (ij[1]+1)
+#     allbaselines = np.unique(baseline_seq)
+#     tb.done()
+#     tb.open(f"{vis}/ANTENNA")
+#     annames = tb.getcol('NAME')
+#     xyz =list(zip(*tb.getcol('POSITION')))
+#     tb.done()
     
     
-    return np.isin(baseline_seq, df_baseline_by(allbaselines, annames, xyz, **kwargs).index)
+#     return np.isin(baseline_seq, df_baseline_by(allbaselines, annames, xyz, **kwargs).index)
 
 def get_axes(vis):
     tb.open(vis)
@@ -801,13 +930,50 @@ def get_fid(vis, target):
 
     return fid
 
-def pl_diag_ms(vis, target, kind='plot', **kwargs):
+
+def get_axes(vis):
+    """
+    Returns avg_amp, avg_phase, time, antenna
+    uvdist is taken assuming UVW is taken from a reference origin at (0,0,0)
+    """
+    from vasco.ms import get_tb_data
+    time, field, data, weight, an1, an2, uvw, flag = get_tb_data(vis, axs=['TIME', 'FIELD_ID', 'DATA', 
+                                                                      'WEIGHT','ANTENNA1','ANTENNA2','UVW',
+                                                                      'FLAG'])
+    amp, ph                  = get_avg_amp_phase(data, weight)
+    sel_idx                  = np.argwhere(~np.isnan(amp)).T[0] 
     
-    field, avg_amp, avg_phase, time, wo_nan     =   get_axes(vis)
-    idx_baseline                                =   sel_by_baseline(vis, **kwargs)[wo_nan]
-    fieldid                                     =   get_fid(vis,target)
-    idx_sel                                     =   np.where(field==fieldid)
+    amp, phase                        = amp[sel_idx], ph[sel_idx]
+    if not len(sel_idx):
+        sel_idx  = None
+    time                              = Time(time/(3600*24), format='mjd')[sel_idx].decimalyear
+    an1                               = an1[sel_idx]
+    an2                               = an2[sel_idx]
+    uvdist                            = np.sqrt((uvw[0].T*uvw[0])+(uvw[1].T*uvw[1]))
+    uvdist                            = uvdist[sel_idx]
+    field                             = field[sel_idx]
     
-    return pl_diag(target=target, amp=avg_amp, phase=avg_phase, time=time, 
-                   idx_baseline=idx_baseline, idx_sel=idx_sel, 
-                   kind='jpg', eps=0.005, min_samples=5)
+    unflagged                         = ((~flag).sum(axis=0)).astype(int)[0][sel_idx]
+    data_dict                         = {'time':time.T, 'unflagged':unflagged.T, 'uvdist':uvdist,
+                                         'an1':an1.T,'an2':an2.T, 'field':field.T, 
+                                         'amp':amp.T, 'phase':phase.T,
+                                        }
+    
+    axs_df                            = df(data_dict)
+    return axs_df
+
+def pl_diag_ms(vis, target, kind='png', **kwargs):
+    fid=''
+    
+    #       Create dataframe from the MS file
+    axs_df = get_axes(vis)
+    if target:
+        msmd.open(vis)
+        fid=msmd.fieldsforname(target)
+    msmd.done() 
+    if target:
+        axs_df_field = axs_df.loc[np.where(axs_df['field'].values==fid)]
+    else:
+        axs_df_field = axs_df    
+    wd = (Path(vis).parent / 'output' / target).resolve()
+    return pl_diag(axs_df_field, kind=kind, prefix=str(wd) )

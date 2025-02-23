@@ -8,7 +8,7 @@ def check_band(freq, bands=None):
         ---
 
         freq            (float)
-                        value of the reference fequency
+                        value of the reference fequency in GHz
 
         bands           (dict)
                         dictionary of bands containing numpy array of limiting values of range of the band.
@@ -25,7 +25,7 @@ def check_band(freq, bands=None):
             bands = {
             'S' : np.array([2.0, 2.6]),
             'C' : np.array([3.5, 7.9]),
-            'X' : np.array([8.0, 8.8]),
+            'X' : np.array([7.901, 8.8]),
             'U' : np.array([11.8, 15.7]),
             'K' : np.array([20.0, 25.0]),
             'Q' : np.array([40.0, 46.0]),
@@ -243,6 +243,45 @@ def id_flux_for_sources(sourcenames, sources_list,  caliblist_file, band='C'):
             if m[idx]!='-': dic[sid[0]] = {'flux':float(flux[idx])}
         
     return df.from_dict(dic, orient='index', columns=['flux'])
+
+def choose_calib_for_snr_rating(all_sci_ant, calibrator_df_sorted_desc, n_ant=9):
+    """
+    the calibrator sources are selected from the provided dataframe based on the needed science antenna,
+    :all_sci_ant:
+                                    (list | required )
+                                    list of the name of the antennas.
+    :calibrator_df_sorted_desc:
+                                    (pandas.DataFrame | required)
+                                    with atleast columns: source, antennas
+                                    
+    Returns
+    -----
+    
+    :sel_calibrator:
+                                    (list)
+                                    list of calibrator sources selected
+    :remain_ant:
+                                    (set)
+                                    returns a set of antennas not found in the provided dataframe
+    """
+    _remain_ant = set(all_sci_ant)
+
+    _sel_calibrator = []
+    count_cal       =   0
+
+    for calibrator in calibrator_df_sorted_desc['source']:
+        idx = calibrator_df_sorted_desc['source']==calibrator
+        if (count_cal<n_ant) or any(remain_an in calibrator_df_sorted_desc.loc[idx]['antennas'].values[0] for remain_an in _remain_ant):
+            _sel_calibrator.append(calibrator)
+
+            common_ant = np.intersect1d(calibrator_df_sorted_desc.loc[idx]['antennas'].values[0], all_sci_ant)
+            _remain_ant = _remain_ant.difference(common_ant)
+            count_cal   +=  1
+            # if (not _remain_ant) and (count_cal>=n_ant): 
+            #     print(count_cal)
+            #     break
+        
+    return _sel_calibrator, _remain_ant
     
 
 def identify_calibrators(t, target, ps, flux_thres, flux_df, min_flux=0.025, ncalib=9, calib_ids=[], hard_selection=False):
@@ -259,27 +298,37 @@ def identify_calibrators(t, target, ps, flux_thres, flux_df, min_flux=0.025, nca
     fx = calib_df['flux']       =   calib_df['flux'].fillna(0)
     calib_df                    =   calib_df.sort_values(by=['flux'], ascending=[False])
     target_flux                 =   calib_df.loc[calib_df['source_name']==target]['flux'].values[0]
+    chk_flux                    =   min_flux
     if target_flux >= flux_thres :
         target_bright           =   True
-        least_calib             =   0
+        least_calib             =   2                       # we can increase this to 1 or 2
+        chk_flux                =   target_flux*1.8         # to check if there is calibrator with higher flux present; 1.8 is random;
     calib_df                    =   calib_df.loc[calib_ids]
-    calib_df_selected           =   calib_df.loc[calib_df['flux']>min_flux] if (len(calib_df['source_name'])>=least_calib and (hard_selection or len(calib_df['source_name'])>ncalib)) else calib_df
+    calib_df                    =   calib_df.sort_values(by=['flux'], ascending=[False])
+    bright_calib_df             =   calib_df.loc[calib_df['flux']>chk_flux]         # even if target is bright if there is a brighter calib let's choose that as intr/bandpass calib.
+    
+    calib_df_selected           =   calib_df.loc[calib_df['flux']>chk_flux] if (len(calib_df['source_name'])>=least_calib and (hard_selection or len(calib_df['source_name'])>ncalib)) else calib_df
     list_calib                  =   list(calib_df_selected['source_name'][:ncalib]) if not calib_df_selected.empty else list(calib_df['source_name'][:ncalib])
     
     if target_bright:
-        calib['science_target'] = None
+        
         calib['calibrators_phaseref'] = None
         if target not in list_calib:
-            if not hard_selection:
-                list_calib.extend([target])
+            if len(bright_calib_df):
+                list_calib      =   list(calib_df_selected['source_name'][:ncalib])
+                calib['science_target'] = [target]
+            # if not hard_selection:          # use ncalib to restrict number of calibrator using least_calibrator. i.e let this get extended
             else:
-                list_calib  =   [target]
+                calib['science_target'] = None
+                list_calib.extend([target])
+            # else:
+            #     list_calib  =   [target]
     else:
         print('target not bright enough')
         if target in list_calib: list_calib.remove(target)
         if ps and (ps in list_calib) : list_calib.remove(ps)
     calib['calibrators_instrphase'] = calib['calibrators_bandpass'] = list_calib
-    
+    # print(list_calib)
     return calib
 
 def identify_sources_fromtarget(scanlist_seq, sourcenames, target_source, other_sources, c_target, c_others, 

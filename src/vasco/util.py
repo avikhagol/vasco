@@ -1,6 +1,16 @@
 import glob
 from collections import defaultdict
 from pathlib import Path
+import json
+
+def save_metafile(metafile, metad):
+    with open(str(metafile), 'w') as mf: json.dump(metad, mf)
+
+def read_metafile(metafile):
+    with open(metafile, 'r') as sf:
+        metad                       =   sf.read()
+        meta                        =   json.loads(metad)
+    return meta
 
 def read_inputfile(folder,inputfile='config.inp',):
     """

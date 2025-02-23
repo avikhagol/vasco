@@ -24,6 +24,7 @@ setup(
     long_description=desc,
     long_description_content_type = "text/markdown",
     install_requires=["astropy", "numpy", "ipython", "pyvirtualdisplay", "pandas", "scipy",
+                      "scikit-learn",
                       
                     #  "casaplotms", # start depreciation
                     #   "casatools",

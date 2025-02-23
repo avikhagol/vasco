@@ -1,7 +1,8 @@
 from astropy.io import fits
-from astropy.time import Time
+from astropy.time import Time, TimeDelta
 import astropy.units as u
 from astropy.table import Table, QTable
+from datetime import datetime
 import numpy as np
 from collections import Counter
 import numpy as np
@@ -118,6 +119,59 @@ def _listobs(fitsfile,cardname=None) :
 
     
     print(f"Possible hdus can be: {str(hdunames)}")
+
+
+def datetimerange_fromfits(fitsfile):
+    """
+    Returns
+    ---
+    
+    (yday_start, yday_end)
+    """
+    hdul = fits.open(fitsfile)
+    hduname, lids = _gethduname(hdul,['UV_DATA'])
+    startyday=(Time(hdul[lids[0]].data['DATE'][0], format='jd') + TimeDelta(hdul[lids[0]].data['TIME'][0], format='jd')).yday    
+    endyday=(Time(hdul[lids[-1]].data['DATE'][-1], format='jd') + TimeDelta(hdul[lids[-1]].data['TIME'][-1], format='jd')).yday
+    
+    return startyday, endyday
+
+def get_yyyymmdd(dateobs):
+    """
+    Takes FITS DATE-OBS with fromat : yy/mm/dd or dd-mm-yyyy and returns (yyyy,mm,dd)
+    Args:
+        dateobs (str): FITS DATE-OBS/RDATE format
+
+    Returns:
+        tuple: (yyyy,mm,dd)
+    """    
+    yyyy, mm, dd = 0,0,0
+    try:
+        dateobs = [int(d) for d in dateobs.split('-')]
+        yyyy = dateobs[0]
+        mm, dd = dateobs[1], dateobs[2]
+    except:
+        dateobs = [int(d) for d in dateobs.split('/')]
+        yyyy = dateobs[2]+1900 if 90<=dateobs[2]<=99 else dateobs[2]+2000
+        mm, dd = dateobs[1], dateobs[0]
+    return yyyy,mm,dd
+
+def get_dateobs(fitsfile):
+    hdul            =   fits.open(fitsfile)
+    dateobs         =   hdul[0].header['DATE-OBS']
+    yyyy,mm,dd      =   get_yyyymmdd(dateobs)
+    return datetime(yyyy, mm, dd)
+
+def groupfreq_byband(fitsfile):
+    hdul = fits.open(fitsfile)
+    groupfreq = {}
+    bandfreq= hdul['FREQUENCY'].data['BANDFREQ'] + hdul['FREQUENCY'].header['REF_FREQ']
+    for freq in bandfreq[0]:
+        band = check_band(freq=freq/1000000000)
+        if band in groupfreq:
+            groupfreq[band].append(freq)
+        else:
+            groupfreq[band] = [freq]
+    return groupfreq
 
 def get_source_id(hdul, source_name, source_hduname = 'SOURCE'):
     """
@@ -634,7 +688,9 @@ def find_refant(fitsfile, verbose=True, return_onmissing=False, tsys_wt=0.99, nr
         t=QTable([anlist,tsys_std,ancountlist], names=('ANNAME', 'STD_TSYS','nRows'), meta={'name':'ANTENNA TSYS Variance'})
         t['Distance']  = [ant_with_d[ant] for ant in t['ANNAME']]
         
-        for ant in missing_antennav: t.add_row([ant, float('nan'), 0,ant_with_d[ant]])
+        for ant in missing_antennav: 
+            print(ant,"\n", t)
+            t.add_row([ant, float('nan'), 0,ant_with_d[ant]])  # for antenna missing tsys value adds row with `nan`
         
         tp=t.to_pandas()
         tp.index += 1
