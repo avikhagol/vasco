@@ -313,6 +313,7 @@ def find_phref_for_target_islowsnr(t, target_source, rfcfile, source_fluxes=None
 def identify_sources_fromtarget(fitsfile, target_source, rfcfile=None, verbose=False, flux_df=None):
     """
     TODO: make it work for non rfcfile cases as well.
+    [ ] make it work with coordinate search
     """
     t = IdentifySource(fitsfile)
     s = t.identify_sources()

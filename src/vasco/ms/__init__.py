@@ -40,10 +40,15 @@ SNR_THRES = 7.0
 
 def get_tb_data(vis, axs=[]):
     tb.open(vis)
+
+    available_cols = tb.colnames()
     res = []
     if len(axs):
         for ax in axs:
-            res.append(tb.getcol(ax))
+            if ax in available_cols:
+                res.append(tb.getcol(ax))
+            else:
+                raise NameError(f"{ax} is not a valid column, choose from {','.join(available_cols)}")
     tb.close()
     return res
 
@@ -789,7 +794,10 @@ def coordinate_for_target(vis, target, sourcenames):
     
     return oth, list(c.keys()), sv
 
-def identify_sources_fromtarget_ms(vis, target_source, caliblist_file=None, msmd=msmd, flux_thres=0.150, min_flux=0.025, ncalib=9, flux_df=None, sourcenames=None, hard_selection=False, metafolder=None):
+def identify_sources_fromtarget_ms(vis, target_source, caliblist_file=None, flux_thres=0.150, min_flux=0.025, ncalib=9, flux_df=None, sourcenames=None, hard_selection=False, metafolder=None):
+    """
+    TODO: change caliblist_file name to calibrator catalog file
+    """
     
     if metafolder is None: metafolder       =   Path(vis).parent / 'vasco.meta'
     metafile                                =   Path(metafolder)  / 'msmeta_sources.vasco'
@@ -823,14 +831,17 @@ def identify_sources_fromtarget_ms(vis, target_source, caliblist_file=None, msmd
     return s_dict
 
 def identify_sources_fromsnr_ms(vis, target_source, caliblist_file=None, snr_metafile=None, outfile='',
-                                flux_thres=18.0, min_flux=8.0,ncalib=9,  msmd=msmd):
+                                flux_thres=18.0, min_flux=7.0,ncalib=9,  msmd=msmd):
 
     if not snr_metafile: snr_metafile       =   Path(vis).parent / 'vasco.meta' / 'sources.vasco'
     mf_dic                                  =   read_metafile(snr_metafile)
-
+    if caliblist_file is None: caliblist_file                          =   mf_dic['NAME']
     msmd.open(vis)
-    sourcenames                             =   get_sourcenames(msmd)
-
+    sourcenames=get_sourcenames(msmd)
+    # sourcenames                             =   {}
+    # for i,fid in enumerate(mf_dic['FIELD_ID']):
+    #     sourcenames[fid]    =   mf_dic['NAME'][i]
+    # print(sourcenames)
     s_df                                    =   df(data=sourcenames.values(), index=sourcenames.keys(), columns=['source_name'])
     mf_df                                   =   df.from_dict(mf_dic)
     mf_df                                   =   mf_df.rename(columns={'NAME':'source_name', 'SNR':'flux'})
@@ -842,7 +853,6 @@ def identify_sources_fromsnr_ms(vis, target_source, caliblist_file=None, snr_met
     mf_df                                   =   s_df.merge(mf_df, on='source_name', how='left')
     flux_df                                 =   df(mf_df['flux'])
     sd = identify_sources_fromtarget_ms(vis, target_source, caliblist_file=caliblist_file, 
-                                msmd=msmd,
                                 flux_thres=flux_thres, min_flux=min_flux, ncalib=ncalib, flux_df=flux_df, sourcenames=sourcenames, 
                                 hard_selection=True)
     if not outfile: outfile = str(Path(vis).parent / 'vasco.meta' / 'sources_ms_snr.vasco')
@@ -942,6 +952,7 @@ def get_axs(vis, ret_sel_idx=False):
                                                                       'WEIGHT','ANTENNA1','ANTENNA2','UVW',
                                                                       'FLAG_ROW'])
     amp, ph                  = get_avg_amp_phase(data, weight)
+    weight_idx               =  weight>=0.0
     sel_idx                  = np.argwhere(~np.isnan(amp)).T[0] 
     
     if (sel_idx is not None) and len(sel_idx):
@@ -985,8 +996,8 @@ def pl_diag_ms(vis, target, kind='png', **kwargs):
     wd = (Path(vis).parent / 'output' / target).resolve()
     return pl_diag(axs_df[unflagged], kind=kind, prefix=str(wd) , **kwargs)
 
-def flag_d(vis, target):
-    success=False
+def flag_d(vis, target,flag=True):
+    success=True
     flagged_perc = 0.0
     eps=0.005 
     n_cores=15
@@ -1023,36 +1034,36 @@ def flag_d(vis, target):
     flaggable_idx = axs_df_scatter['labels']==-1
     
     print(sum(flaggable_idx), "flaggable visibility")
-
-    tb = table()
-    tb.open(vis, nomodify=False)
-    
-    size =  df_vis.index.max() + 1  
-    idx_int = df_vis[idx_non_autocorr][idx_field][flaggable_idx].index
-    
-    
-    
-    flaggable_data = tb.getcol('FLAG_ROW')
-    if len(flaggable_data)!= len(df_vis.index): raise TypeError("The flag row column is not the same as column data")
-
-    flaggable_data[idx_int] = True
-
-    # flag= tb.getcol('FLAG')
-    # flag.T[idx_int] = ~tb.getcol('FLAG').T[idx_int]
-
-    try:
+    if flag:
+        tb = table()
+        tb.open(vis, nomodify=False)
         
-        tb.putcol('FLAG_ROW', flaggable_data)
-        # tb.putcol('FLAG', flag)
-        success = tb.flush()
-        tb.close()
-        tb.done()
+        size =  df_vis.index.max() + 1  
+        idx_int = df_vis[idx_non_autocorr][idx_field][flaggable_idx].index
         
-        flagged_perc = np.round(len(idx_int)/len(flaggable_data)*100,3)
-        overall_flagged = np.round(sum(flaggable_data)/len(flaggable_data)*100,3)
-        print(f"Flagged successfully: {flagged_perc} % | overall flagged: {overall_flagged} %")
         
-    except:
-        traceback.print_exc()
-        success=False
+        
+        flaggable_data = tb.getcol('FLAG_ROW')
+        if len(flaggable_data)!= len(df_vis.index): raise TypeError("The flag row column is not the same as column data")
+
+        flaggable_data[idx_int] = True
+
+        # flag= tb.getcol('FLAG')
+        # flag.T[idx_int] = ~tb.getcol('FLAG').T[idx_int]
+        
+        try:
+            
+            tb.putcol('FLAG_ROW', flaggable_data)
+            # tb.putcol('FLAG', flag)
+            success = tb.flush()
+            tb.close()
+            tb.done()
+            
+            flagged_perc = np.round(len(idx_int)/len(flaggable_data)*100,3)
+            overall_flagged = np.round(sum(flaggable_data)/len(flaggable_data)*100,3)
+            print(f"Flagged successfully: {flagged_perc} % | overall flagged: {overall_flagged} %")
+            
+        except:
+            traceback.print_exc()
+            success=False
     return flagged_perc, success

@@ -21,7 +21,7 @@ def pl_diag(axs_df, eps=0.005, n_cores=15, kind='png', autocorr=False, prefix=''
     dic_pl_scatter={
         'x_labels':[ 'time', 'time'],
         'y_labels':[ 'phase', 'amp'],
-        'color_label':'uvdist',
+        'color_axs':'uvdist',
         'cmap':'jet',
         'select':'*',
     }
@@ -32,7 +32,7 @@ def pl_diag(axs_df, eps=0.005, n_cores=15, kind='png', autocorr=False, prefix=''
     dic_pl_scatter={
         'x_labels':[ 'uvdist', 'uvdist'],
         'y_labels':[ 'phase', 'amp'],
-        'color_label':'an1',
+        'color_axs':'an1',
         'cmap':'jet',
         'select':'*',
     }
@@ -42,7 +42,7 @@ def pl_diag(axs_df, eps=0.005, n_cores=15, kind='png', autocorr=False, prefix=''
     dic_pl_scatter={
         'x_labels':['amp'],
         'y_labels':['phase'],
-        'color_label':'uvdist',
+        'color_axs':'uvdist',
         'cmap':'jet',
     }
     
@@ -63,7 +63,7 @@ def pl_diag(axs_df, eps=0.005, n_cores=15, kind='png', autocorr=False, prefix=''
     dic_pl_scatter={
         'x_labels':['amp'],
         'y_labels':['phase'],
-        'color_label':'labels',
+        'color_axs':'labels',
         'cmap':'jet',
     }
     
@@ -73,7 +73,7 @@ def pl_diag(axs_df, eps=0.005, n_cores=15, kind='png', autocorr=False, prefix=''
     dic_pl_scatter={
         'x_labels':['time', 'time'],
         'y_labels':['phase', 'amp'],
-        'color_label':'labels',
+        'color_axs':'labels',
         'cmap':'jet',
     }
     
@@ -84,7 +84,7 @@ def pl_diag(axs_df, eps=0.005, n_cores=15, kind='png', autocorr=False, prefix=''
     dic_pl_scatter={
         'x_labels':['uvdist', 'uvdist'],
         'y_labels':['phase', 'amp'],
-        'color_label':'labels',
+        'color_axs':'labels',
         'cmap':'jet',
     }
     
@@ -144,7 +144,6 @@ def get_avg_amp_phase(data, weight):
     amp     = np.sqrt(data.real.T*data.real.T + data.imag.T*data.imag.T)
     avg_amp = np.nanmean(amp.T, axis=0)[0]#*weight[0]
     avg_phase= np.nanmean(np.rad2deg(np.arctan2(data.imag, data.real)), axis=0)[0]
-    
     return avg_amp, avg_phase
 
 def pl_imshow(imgs, titles, xlabels, ylabels, extents=[None], kind='jpg', cmap='Purples'):
@@ -185,17 +184,15 @@ def calcscatter_fromlabels_df(axs_df, labels, x_label, y_label):
         axs_df.loc[idx_label,f'{y_label}_scatter'] = y_scatter
     return axs_df
 
-
-def pl_scatter(axs_df_field_scatter, x_labels, y_labels, color_label, cmap, select='*', kind='plot', output='output.jpg'):
+def pl_scatter(vis_df, x_labels, y_labels, color_axs, cmap, select='*', kind='plot', output='output.jpg'):
     if select and not '*' in select:
-        axs_df_field_scatter = axs_df_field_scatter.query(select)
-        
+        vis_df = vis_df.query(select)
     
-    unique_labels = axs_df_field_scatter[color_label].unique()
+    unique_labels = vis_df[color_axs].unique()
     
-    mx_label = axs_df_field_scatter[color_label].max()
-    if color_label=='labels':
-        axs_df_field_scatter[color_label] = axs_df_field_scatter[color_label].where(axs_df_field_scatter[color_label] != -1, axs_df_field_scatter[color_label].max() + 10)
+    # mx_label = vis_df[color_axs].max()
+    if color_axs=='labels':
+        vis_df[color_axs] = vis_df[color_axs].where(vis_df[color_axs] != -1, vis_df[color_axs].max() + 10)
     
     norm = plt.Normalize(vmin=unique_labels.min(), vmax=unique_labels.max())
     cmap = plt.get_cmap(cmap, len(unique_labels))        
@@ -204,16 +201,16 @@ def pl_scatter(axs_df_field_scatter, x_labels, y_labels, color_label, cmap, sele
     if len(x_labels)<2: ax = [ax]
     for i,(xlabel,ylabel) in enumerate(zip(x_labels, y_labels)):
         title = f"{ylabel}_{xlabel}"
-        ax[i].scatter(axs_df_field_scatter[xlabel],axs_df_field_scatter[ylabel], 
-                        c=axs_df_field_scatter[color_label], 
+        ax[i].scatter(vis_df[xlabel],vis_df[ylabel], 
+                        c=vis_df[color_axs], 
                         cmap=cmap, norm=norm, marker=',',
-                          label=color_label,
+                          label=color_axs,
                          )
         ax[i].set_xlabel(xlabel)
         ax[i].set_ylabel(ylabel)
         ax[i].set_title(title)
     cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax[-1], shrink=0.4)
-    cbar.set_label(f"{color_label}")
+    cbar.set_label(f"{color_axs}")
 #     plt.colorbar(ax=ax[0])
     save_fig(plt, fig, kind=kind, output=output)
 

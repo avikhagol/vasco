@@ -314,8 +314,7 @@ def identify_calibrators(t, target, ps, flux_thres, flux_df, min_flux=0.025, nca
     calib_df_selected           =   calib_df.loc[calib_df['flux']>chk_flux] if (len(calib_df['source_name'])>=least_calib and (hard_selection or len(calib_df['source_name'])>ncalib)) else calib_df
     list_calib                  =   list(calib_df_selected['source_name'][:ncalib]) if not calib_df_selected.empty else list(calib_df['source_name'][:ncalib])
     
-    if target_bright:
-        
+    if target_bright:        
         calib['calibrators_phaseref'] = None
         if target not in list_calib:
             if len(bright_calib_df):
@@ -332,7 +331,6 @@ def identify_calibrators(t, target, ps, flux_thres, flux_df, min_flux=0.025, nca
         if target in list_calib: list_calib.remove(target)
         if ps and (ps in list_calib) : list_calib.remove(ps)
     calib['calibrators_instrphase'] = calib['calibrators_bandpass'] = list_calib
-    # print(list_calib)
     return calib
 
 def identify_sources_fromtarget(scanlist_seq, sourcenames, target_source, other_sources, c_target, c_others, 

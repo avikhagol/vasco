@@ -5,7 +5,7 @@ with open("README.md", "r") as rdme:
 
 setup(
     name = 'vasco',
-    version = '0.1.0',
+    version = '0.1.2',
     url='https://gitlab.ia.forth.gr/smile/vasco/',
     author='Avinash Kumar',
     author_email='avialxee@gmail.com',
@@ -31,7 +31,7 @@ setup(
                       "protobuf==3.19.6",
                       ],
     extras_require = {
-        "all" : ['fitsio'] , # hopefully cfitsio is installed in the local system;
+        "all" : ['fitsio', 'casatools', 'casatasks', 'dask[distributed]'] , # hopefully cfitsio is installed in the local system;
         "dev" : ["pytest>=3.7",
         ]
     },

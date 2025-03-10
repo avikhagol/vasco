@@ -583,6 +583,62 @@ def daskclient(
     return client
 
 
+def get_df_vis_forsampling(vis):
+    time, an1, an2, fids, sids, flag_row = get_tb_data(f'{vis}', axs=['TIME', 'ANTENNA1', 'ANTENNA2', 'FIELD_ID', 'SCAN_NUMBER', 'FLAG_ROW'])
+
+    unflagged                               = np.logical_not(flag_row).astype(int)
+
+    data_dict = {
+        'time': time,
+        'an1': an1.T, 'an2': an2.T, 'fid': fids.T,
+        'sid': sids.T, 'unflagged':unflagged.T
+    }
+    df_vis = dd.from_pandas(df(data_dict), npartitions=10)  # Adjust partitions based on your dataset size
+
+    return df_vis
+
+
+def apparant_sampling(vis, target):
+    dic_apparant_sampling   =   {}
+    fields = get_tb_data(f"{vis}/FIELD", ['NAME'])
+    fid     =   list(fields).index(target)
+
+
+    tb= table()
+    tb.open(f"{vis}/SPECTRAL_WINDOW")
+    numchan = tb.getcol('NUM_CHAN')
+    nspw = numchan.shape[0]
+    nchan = max(numchan)
+    tb.done()
+
+    df_vis = get_df_vis_forsampling(vis)
+    
+    tb.open(f"{vis}")
+    expos = tb.getcol('EXPOSURE')
+    tb.close()
+    
+    expos_max, expos_min =expos.max(),expos.min()
+    
+    df_vis_field      =   df_vis[df_vis['fid']==fid]
+    t1 = Time(df_vis_field[['time', 'sid']].groupby(['sid']).max()['time'].compute().values/(3600*24), format='mjd').decimalyear
+    t2 = Time(df_vis_field[['time', 'sid']].groupby(['sid']).min()['time'].compute().values/(3600*24), format='mjd').decimalyear
+    obslen      =           sum((Time(t1, format='decimalyear')-Time(t2, format='decimalyear')).to_value('sec'))
+    nbaseline   = df_vis_field[['an1','an2', 'time']][(df_vis_field['unflagged']==1) & (df_vis_field['an1']!=df_vis_field['an2'])].groupby(['an1','an2']).max().compute().shape[0]
+    ntint       =   df_vis_field[['an1','an2', 'time']][(df_vis_field['unflagged']==1) & (df_vis_field['an1']!=df_vis_field['an2'])].groupby(['time']).max().compute().shape[0]
+    nvis        =   df_vis_field[['an1','an2', 'time']][(df_vis_field['unflagged']==1) & (df_vis_field['an1']!=df_vis_field['an2'])].compute().shape[0]
+    
+    # obslen = (Time(df_vis_field[['field','time']].groupby(['field']).max()['time'].values[0], format='decimalyear')- Time(df_vis_field[['field','time']].groupby(['field']).min()['time'].values[0], format='decimalyear')).to_value('sec')
+    
+    dic_apparant_sampling = {
+        "nvis":nvis, "nspw":nspw, "nbaseline":nbaseline, "ntint":ntint,
+        "nchan" : nchan,
+        "apparant_sampling": nvis/nspw/nbaseline/ntint,
+        "expos_max":expos_max, "expos_min":expos_min,
+        "obslen":obslen,
+    }
+
+    
+    return dic_apparant_sampling
 
 
 def get_df_vis(vis):
@@ -855,7 +911,7 @@ def get_tbd(tbl, cols=[]):
     tb.close()
     return res[0] if len(res)==1 else res
 
-def select_df_refant_sources(tbls, an_dict, autocorr=False, minsnr=3.0, wt_d=1.0, wt_tsys=0.7, wt_occ=0.85, wt_snr=1.0):
+def select_df_refant_sources(tbls, an_dict, autocorr=False, minsnr=3.0, calib_snr_thres=7.0, wt_d=1.0, wt_tsys=0.0, wt_occ=0.85, wt_snr=1.0, n_calib=6):
     
     ddf_tbl = df_fromables(tbls)
     
@@ -912,9 +968,17 @@ def select_df_refant_sources(tbls, an_dict, autocorr=False, minsnr=3.0, wt_d=1.0
     ddf_tbl['refant_count'] = ddf_tbl['refant_count']/ddf_tbl['refant_count']
     ddf_tbl = ddf_tbl.sort_values(by=['refant_count'], ascending=False)
 
-    refant_snr_median = ddf_tbl.groupby(['FIELD_ID','refant','refantid', 'refant_D','STD_TSYS', 'refant_count'])[['SNR']].median().reset_index()
+    refant_snr_median = ddf_tbl.groupby(['FIELD_ID','refant','refantid', 'refant_D','STD_TSYS', 'refant_count'])[['SNR']].median().reset_index().compute()
     
-    d, std_tsys, occ, snr   =   refant_snr_median['refant_D'], refant_snr_median['STD_TSYS'], refant_snr_median['refant_count'], refant_snr_median['SNR']
+    refant_snr_median_18 = refant_snr_median.dropna().query('SNR>18')
+    if len(refant_snr_median_18['FIELD_ID'].unique())<n_calib+1:
+        refant_snr_median_18 = refant_snr_median.dropna().query(f'SNR>{calib_snr_thres}')
+    if len(refant_snr_median_18['FIELD_ID'].unique())<n_calib+1:
+        refant_snr_median_18 = refant_snr_median.dropna().query(f'SNR>{minsnr}')
+    if len(refant_snr_median_18['FIELD_ID'].unique())<n_calib+1:
+        refant_snr_median_18 = refant_snr_median.dropna().query(f'SNR>1')
+        
+    d, std_tsys, occ, snr   =   refant_snr_median_18['refant_D'], refant_snr_median_18['STD_TSYS'], refant_snr_median_18['refant_count'], refant_snr_median_18['SNR']
     d_norm                  =   1-(d/d.max())
     tsys_norm               =   1-(std_tsys/std_tsys.max())
     # max_field_snr           =   field_snr['SNR'].compute().values[0]
@@ -924,17 +988,18 @@ def select_df_refant_sources(tbls, an_dict, autocorr=False, minsnr=3.0, wt_d=1.0
     #     snr                     =   snr.clip(upper=max_field_snr)
     snr_norm                =   snr/snr.max()
     occ_norm                =   occ/occ.max()
+    
 
-    refant_snr_median['c']  =   ((d_norm*wt_d)+(snr_norm*wt_snr)+(tsys_norm*wt_tsys)+(occ_norm*wt_occ))/(wt_d+wt_snr+wt_tsys+wt_occ)
-    refant_with_c =         refant_snr_median.sort_values(by=['c'], ascending=False)
+    refant_snr_median_18['c']  =   ((d_norm*wt_d)+(snr_norm*wt_snr)+(tsys_norm*wt_tsys)+(occ_norm*wt_occ))/(wt_d+wt_snr+wt_tsys+wt_occ)
+    refant_with_c =         refant_snr_median_18.sort_values(by=['c'], ascending=False)
 
-    return refant_with_c.compute(), ddf_tbl.persist()
+    return refant_with_c, ddf_tbl.persist()
 
 def find_refant_fromdf(tbls, an_dict, sources_dict, autocorr=False, minsnr=3.0, calib_snr_thres=7.0, n_refant=4, n_calib=6, verbose=True):
 
     tbls = [tbl for tbl in tbls if Path(tbl).exists()]
 
-    df_refant, ddf_tbl = select_df_refant_sources(tbls=tbls, an_dict=an_dict, autocorr=autocorr, minsnr=minsnr)
+    df_refant, ddf_tbl = select_df_refant_sources(tbls=tbls, an_dict=an_dict, autocorr=autocorr, minsnr=minsnr, calib_snr_thres=calib_snr_thres, n_calib=n_calib)
 
     refants = df_refant['refant'].unique()[:n_refant]
 
@@ -942,7 +1007,7 @@ def find_refant_fromdf(tbls, an_dict, sources_dict, autocorr=False, minsnr=3.0, 
     ddf_tbl_18 = ddf_tbl.dropna().query('SNR>18')
     if len(ddf_tbl_18['FIELD_ID'].unique())<n_calib+1:
         ddf_tbl_18 = ddf_tbl.dropna().query(f'SNR>{calib_snr_thres}')
-    df_field = ddf_tbl_18[['FIELD_ID','SCAN', 'SNR']].groupby(['FIELD_ID','SCAN']).median().compute().sort_values(by=['SNR'], ascending=False).reset_index()
+    df_field = ddf_tbl_18[['FIELD_ID','SCAN', 'SNR']].groupby(['FIELD_ID','SCAN']).mean().compute().sort_values(by=['SNR'], ascending=False).reset_index()[:n_calib]          # taking first n_calib considering scans
     
     df_field['NAME'] = df_field['FIELD_ID'].map(sources_dict)
     pp_out += df_refant.to_string() + "\n"

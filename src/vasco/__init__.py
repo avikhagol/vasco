@@ -55,7 +55,31 @@ cl=parser.add_argument_group('Calibrator List',"""
 # cl.add_argument('--search', help='Comma separated list of sources', action="store_true")
 cl.add_argument('-C','--column', help='Comma separated values of column to get value for')
 
+def plot_ms(args):
+    from vasco.diag import pl_scatter
+    from vasco.ms import get_axs
+    from vasco.ms.fringefit import get_tb_data
+    for msfile in args.input_file:
+        df_vis = get_axs(vis=msfile)
+    output  =   f"vasco.diag/"
+    if args.sources:
+        fields  =   get_tb_data(f"{msfile}/FIELDS", ['NAME'])
+        fid     =   fields.compute().index(args.sources)
+        df_vis  =   df_vis[df_vis['field']==fid]
+        output  +=  f"{args.sources}_"
+    output  +=  f"{'_'.join(args.y)}_vs_{'_'.join(args.x)}"
+    pl_scatter(df_vis, x_labels=args.x, y_labels=args.y, color_axs=args.color_axs, cmap='jet', select=args.select, kind='png', output=output)
+    print(f"Plotting {args.input_file} with x={args.x} and y={args.y}")
 
+# pl = parser.add_subparsers(dest="command", required=True)
+
+# # plot_parser = pl.add_parser("plot", help="Plot data from a MS file")
+# # plot_parser.add_argument('input_file', nargs='*', help="Input MS file")
+# # plot_parser.add_argument("--x", type=str, required=True, help="X-axis parameter")
+# # plot_parser.add_argument("--y", type=str, required=True, help="Y-axis parameter")
+# # plot_parser.add_argument("--select", type=str, required=False, default='*', help="select data using query")
+# # plot_parser.add_argument("--color-axs", type=str, required=False, default='uvdist', help="choose column to plot the colour map")
+# # plot_parser.set_defaults(func=plot_ms)
 
 def params_fromlist(pl_value):
     params={}
@@ -204,6 +228,7 @@ def _vitals_check(args, metafolder):
 
     elif input_file:
         for file in input_file:
+            print(file)
             if not Path(file).exists(): 
                 status_check=False
                 desc=f"Input file not found: '{file}'"
@@ -269,7 +294,7 @@ def cli():
                 s               =   identify_sources_fromsnr_ms(msname, target_source=target, 
                                                                 caliblist_file=rfc_find(write=False), 
                                                                         snr_metafile=sourcesf, outfile=output_file,
-                                                                        flux_thres=18.0, min_flux=8.0,ncalib=6)
+                                                                        flux_thres=7.0, min_flux=7.0,ncalib=6)
                 print(s)
             else:
                 for fitsfile in input_file:
