@@ -32,7 +32,7 @@ setup(
                       "protobuf==3.20.3",
                       ],
     extras_require = {
-        "all" : ['fitsio', 'casatools', 'casatasks', 'dask[distributed]'] , 
+        "all" : ['fitsio', 'casatools', 'casatasks', 'python-casacore'] , 
         "dev" : ["pytest>=3.7",
         ]
     },

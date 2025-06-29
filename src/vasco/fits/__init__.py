@@ -11,6 +11,7 @@ from pathlib import Path
 from pandas import DataFrame as df, set_option
 import warnings
 import re
+from numpy.lib.stride_tricks import sliding_window_view
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 
 set_option('display.max_colwidth', None)
@@ -121,6 +122,163 @@ def _listobs(fitsfile,cardname=None) :
 
     
     print(f"Possible hdus can be: {str(hdunames)}")
+
+
+
+def check_seq_occurance(arr, seq=[1]):
+    mask_freqid             =   np.insert(arr[1:] != arr[:-1], 0, True)
+    deduplicated_freqid     =   arr[mask_freqid]
+    windows                 =   sliding_window_view(deduplicated_freqid, len(seq))[::len(seq)]
+    return np.all(np.all(windows == seq, axis=1))
+
+def flatten_data_for_freqid(freqd, freqid :int =1, verbose=True):
+    """
+    flattens data to single row if multiple rows found
+    Note: Only tested on FREQUENCY table.
+    """
+    nrows = len(freqd)
+    if nrows>1:
+        if verbose: print(f"{nrows} rows found! flattening to 1.")
+        freql = {0: np.array(freqid, dtype=freqd['FREQID'].dtype)}
+        for j,row in enumerate(freqd):
+            for i,colv in enumerate(row):
+                if i not in freql: freql[i] = np.array([])
+                if i>=1:
+                    freql[i] = np.append(freql[i],colv)
+                    freql[i] = np.array(freql[i], dtype=colv.dtype)
+        data = tuple(freql.values())
+        new_fields = []
+        name, (typ, shape) = None, (None, None)
+        
+        for i,row in enumerate(freqd.dtype.descr):
+            if len(row)==2:
+                name, typ = row
+            else:
+                name, typ, shape = row
+            
+            if shape:
+                
+                new_shape = (nrows*shape[0],)
+                if verbose: print(name, shape, '-->', new_shape)
+                new_fields.append((name, typ, new_shape))
+            else:
+                new_fields.append((name, typ))
+
+        new_dtype = np.dtype(new_fields)
+        data = tuple(data)
+
+        new_freqhdudata = fits.FITS_rec(np.rec.array([data], new_dtype)) # equivalent to hdu['FREQUENCY].data
+        freqd = new_freqhdudata
+    return freqd
+
+
+
+def bintb_tohdu(hdu, hdu_data, automatic_format=True, verbose=True):
+    
+    hdu_data_coldefined                  =   fits.ColDefs(hdu_data)
+    hdu_new_tbl                             =   fits.BinTableHDU.from_columns(hdu_data_coldefined)
+    nspws                               =   hdu_new_tbl.data['BANDFREQ'].shape[1]
+    
+    if not automatic_format:
+        for colf in hdu_new_tbl.columns:
+            if colf.format == 'J':
+                hdu_new_tbl.columns[str(colf.name)].format = fits.column._ColumnFormat("1J")        
+    
+    if not 'NO_BAND' in hdu_new_tbl.header:
+            hdu_new_tbl.header['NO_BAND']   =   nspws
+    
+    for card in hdu.header:
+            if not card in hdu_new_tbl.header :
+                hdu_new_tbl.header[card]    =   hdu.header[card]
+                print(f"{card} ...copied")
+            else:
+                if hdu.header[card]    !=  hdu_new_tbl.header[card]:
+                    if verbose : print(card, hdu.header[card],"-->" , hdu_new_tbl.header[card])
+    return hdu_new_tbl
+
+def fix_freqid_bintab(hdul, tab=['UV_DATA'], verbose=True):
+    """
+    checks sequence of occurance matches withe the unique sorted values in FREQID
+    e.g expected sequence [1,2] if finds [2,1] for FREQID sequence will throw error
+    else change to FREQID=1 
+    
+    Returns
+    -------
+    
+    hdu with FREQID changed to first value of FREQID in FREQUENCY table
+    
+    """
+    
+    freqhdudata = hdul['FREQUENCY'].data
+    nspws   =   freqhdudata['BANDFREQ'].shape[1]
+    
+    
+    for itb in hdul:
+        if 'NO_BAND' in hdul[itb].header:
+                hdul[itb].header['NO_BAND'] = nspws
+    
+    _, tbindex = _gethduname(hdul, tab)
+    
+    for tb in tbindex:
+        
+        
+        arr = hdul[tb].data['FREQID']
+        
+        
+        
+        mask_freqid             =   np.insert(arr[1:] != arr[:-1], 0, True)
+        deduplicated_freqid     =   arr[mask_freqid]
+        freqids                 =   np.unique(arr)
+
+        if check_seq_occurance(deduplicated_freqid, freqids):    
+            if len(freqhdudata)==1:
+                if len(freqids)>1 or freqhdudata['FREQID'][0]!=freqids[0]:
+                    freqid      =   freqhdudata['FREQID'][0]
+                    if verbose: 
+                        print(f"\nfixing {hdul[tb]}")
+                        print(f"FREQID {freqids} --> {freqid}")
+                    hdul[tb].data['FREQID']  =   freqid
+        else:
+            raise IndexError(f"Found incompatible sequence in {deduplicated_freqid} of FREQID in {tab}. Required: {freqids}")
+    return hdul
+
+def add_rows_for_freqid(hdu, tab='ANTENNA'):
+    """
+    Populates duplicate antenna rows for different freqid if found in FREQUENCY table.
+    """
+    if not all(np.unique(hdu['FREQUENCY'].data['FREQID']) == np.unique(hdu[tab].data['FREQID'])):
+        dic_ant_table = {}
+        binTable = hdu[tab].data.copy()
+        
+        freqid = np.unique(hdu['FREQUENCY'].data['FREQID'])
+        count = 0
+        for j,row in enumerate(binTable):
+            for i,freq_id in enumerate(freqid):
+                row['FREQID'] = freq_id
+                
+                dic_ant_table[count] = [np.rec.array(list(row), dtype=binTable.dtype)]
+                
+                count+=1
+                
+        data = np.hstack(list(dic_ant_table.values()))
+
+        fits_rec = fits.FITS_rec(data)
+        
+        hdu_new_tbl = fits.BinTableHDU.from_columns(fits.ColDefs(fits_rec))
+        for card in hdu[tab].header:
+            if not card in hdu_new_tbl.header :
+                hdu_new_tbl.header[card] = hdu[tab].header[card]
+                
+        hdu[tab] = hdu_new_tbl
+    return hdu
+
+def add_antenna_for_freqid(hdu):
+    """
+    Populates duplicate antenna rows for different freqid if found in FREQUENCY table.
+    """
+    if not all(np.unique(hdu['FREQUENCY'].data['FREQID']) == np.unique(hdu['ANTENNA'].data['FREQID'])):
+        hdu = add_rows_for_freqid(hdu, tab='ANTENNA')
+    return hdu
 
 def choose_correct_id_forduplicate_fields(hdu):
     chosen_id, rem_ids = None, None

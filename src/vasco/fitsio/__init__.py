@@ -2,10 +2,13 @@ import numpy as np
 from astropy.time import Time
 from astropy import units as u
 from fitsio import FITS
-from pandas import DataFrame as df
+from pandas import DataFrame as df, concat
+from astropy.coordinates import SkyCoord
 import warnings
 import itertools
 from vasco import rfc_find
+from vasco.util import rfc_ascii_to_df, parse_class_cat, compute_sep    
+from vasco.sources import check_band
 
 
 warnings.filterwarnings(action='ignore', message='ERFA function')
@@ -20,6 +23,15 @@ def get_sources_id(sources_dict, sources):
     sourceid = s_df[s_df['source_name'].isin(sources)]
     
     return list(sourceid.index)
+
+def get_colnames(hdu, cols):
+    matching_cols = []
+    found_cols = hdu.get_colnames()
+    
+    for col in cols:
+        matching_cols += [colname for colname in found_cols if col in colname]
+
+    return matching_cols
 
 def sources_fio(hdul):
     _, lids   = _gethduname_fio(hdul,['SOURCE'])
@@ -511,3 +523,295 @@ class IdentifySource:
             chances[i]              =   (np.round(((1/sep_limit)*p_sep + closer_scan)/2, 3))
         res                         =   df(zip(other_sources[idxres]['SOURCE'], chances), index=list(other_sources[idxres][sid_colname]), columns=['source', 'chances'])
         res                         =   res.sort_values(by=['chances'], ascending=[False])    
+        
+def rfc_search_from_fits(fitsfile, rfc_filepath, seplimit=5e3, thres_sep=1e4):
+    from vasco.util import rfc_parse_search_pattern, SkyCoord, rfc_ascii_to_df, compute_sep, concat
+    
+    frame           =   'icrs'
+    fo              =   FITS(fitsfile, mode='r')
+    shdu            =   fo.movnam_hdu('SOURCE')
+    
+    target_names    =   fo[shdu-1].read()['SOURCE']
+    
+    idx_found       =   np.zeros(np.shape(target_names), dtype=bool)
+    
+    match_res       =   rfc_parse_search_pattern(rfc_filepath, patterns=target_names, verbose=False, col_rows=4, search_key='fits_target')
+    
+    if not match_res.empty:
+        idx_found       =   np.in1d(target_names, match_res['fits_target'].values)
+    
+    ra              =   fo[shdu-1].read()['RAEPO']*u.deg
+    dec             =   fo[shdu-1].read()['DECEPO']*u.deg
+    target_coords   =   SkyCoord(ra,dec, frame=frame)
+    epoch         =   np.unique(fo[shdu-1].read()['EPOCH'])
+    
+    if not len(epoch)==1:
+    #     frame       =   frame if epoch[0] == 2000 else frame
+    # else:
+        raise ValueError(f'Multiple EQUINOX values are not supported yet : {epoch}')
+    
+    if not match_res.empty:
+        match_res['sep'] = match_res.apply(lambda row: compute_sep(row, target_names, target_coords), axis=1, )
+        
+        # if not match_res['fits_target'].is_unique:
+        #     ...
+        # check if multiple results, sort by the closest one remove the one above sepration threshold
+        
+        idx_overthres_fits    =  np.in1d(target_names,match_res[match_res['sep']>thres_sep].values)
+        idx_found[idx_overthres_fits] = False
+        
+        idx_overthres_df    =  np.in1d(match_res['sep'].values,match_res[match_res['sep']>thres_sep].values)
+        idx_overthres_arg   =   np.argwhere(idx_overthres_df).T[0]
+        print("  found by name but separation above threshold, ignoring....", " ".join(match_res.loc[idx_overthres_df]['fits_target']))
+        match_res.drop(index=idx_overthres_arg, inplace=True)
+        
+    if any(~idx_found):
+        print("  searching by coordinate for..."," ".join(target_names[~idx_found]))
+        
+        
+        df_rfc = rfc_ascii_to_df(rfc_filepath)
+        
+        catalog = SkyCoord(df_rfc['coordinate'].values, frame=frame)
+        
+        idxtarget, idxself, sep2d, dist3d = catalog.search_around_sky(target_coords[~idx_found], seplimit=seplimit*u.milliarcsecond)
+        df_coord_search = df_rfc.loc[idxself]
+        df_coord_search['sep'] = sep2d.milliarcsecond
+        df_coord_search['fits_target'] = target_names[~idx_found][idxtarget]
+        if not match_res.empty:
+            # match_res['sep'] = match_res.apply(lambda row: compute_sep(row, target_names, target_coords), axis=1, )
+            df_coord_search = df_coord_search[match_res.columns]
+            df_coord_search.index =  df_coord_search.index + 10000
+        
+        match_res = concat([match_res, df_coord_search])
+        match_res = match_res.drop(columns=['RAh', 'RAm','RAs', 'DE-', 'DEd', 'DEm', 'DEs', 'Nobs', 'Nsca', 'Nses', 'Corr'],errors='ignore')
+        if 'coordinate' in match_res:
+            match_res.insert(2, 'coordinate', match_res.pop('coordinate'))
+        if 'sep' in match_res:
+            match_res.insert(0, 'sep', match_res.pop('sep'))
+        
+    return match_res
+
+
+
+# def catalog_search_from_fits(fitsfile, df_catalog, seplimit, thres_sep, source_name_col='Obsname', frame='icrs'):
+    
+#     from vasco.util import SkyCoord, compute_sep, concat
+#     if 'GB6' in df_catalog.columns:
+#         df_catalog      =   df_catalog.drop_duplicates(subset='GB6', keep='first')#.set_index('GB6')
+    
+#     fo              =   FITS(fitsfile, mode='r')
+#     shdu            =   fo.movnam_hdu('SOURCE')
+    
+#     target_names    =   fo[shdu-1].read()['SOURCE']
+#     idx_found       =   np.zeros(np.shape(target_names), dtype=bool)        # i.e not found
+    
+#     ra              =   fo[shdu-1].read()['RAEPO']*u.deg
+#     dec             =   fo[shdu-1].read()['DECEPO']*u.deg
+#     target_coords   =   SkyCoord(ra,dec, frame=frame)
+#     epoch           =   np.unique(fo[shdu-1].read()['EPOCH'])
+    
+#     if len(epoch)==1:
+#         frame       =   'icrs' if epoch[0] == 2000 else 'icrs'
+#     else:
+#         raise ValueError(f'Multiple EQUINOX values are not supported yet : {epoch}')
+    
+#     match_res       =   df_catalog[df_catalog[source_name_col].isin(target_names)]
+#     if not match_res.empty:
+#         idx_found       =   np.in1d(target_names, match_res[source_name_col].values)
+    
+#     if source_name_col in match_res.columns: match_res            =   match_res.rename(columns={source_name_col:'fits_target'})                     # since each row found corrosponds to the name match from fits
+#                                                                                                                                                         # assumes the column will be populated with consistency
+#     if 'fits_target' in match_res.columns: match_res['sep'] =   match_res.apply(lambda row: compute_sep(row, target_names, target_coords, frame), axis=1 )
+    
+#     if any(~idx_found):
+#         print("  searching by coordinate for..."," ".join(target_names[~idx_found]))
+    
+#         catalog                             =   SkyCoord(df_catalog['coordinate'].values, unit=(u.hourangle, u.deg), frame=frame)
+        
+#         idxtarget, idxself, sep2d, dist3d   =   catalog.search_around_sky(target_coords[~idx_found], seplimit=seplimit*u.milliarcsecond)
+#         df_coord_search                     =   df_catalog.iloc[idxself].copy()
+#         df_coord_search['sep']              =   sep2d.milliarcsecond
+        
+#         df_coord_search['fits_target']      =   target_names[~idx_found][idxtarget]                                                                             # important in order to keep consistency.
+        
+#         if not match_res.empty:
+#             df_coord_search                 =   df_coord_search[match_res.columns]
+#             df_coord_search.index =  df_coord_search.index + 10000
+        
+#         match_res = concat([match_res, df_coord_search])
+#         # match_res = match_res.drop(columns=['RAh', 'RAm','RAs', 'DE-', 'DEd', 'DEm', 'DEs', 'Nobs', 'Nsca', 'Nses', 'Corr'],errors='ignore')
+#         if 'coordinate' in match_res:
+#             match_res.insert(2, 'coordinate', match_res.pop('coordinate'))
+#         if 'sep' in match_res:
+#             match_res.insert(0, 'sep', match_res.pop('sep'))
+        
+#     return match_res
+
+def df_source_fits(fitsfile, frame='icrs', coord_col= 'fits_coordinate'):
+    fo              =   FITS(fitsfile, mode='r')
+    shdu            =   fo.movnam_hdu('SOURCE')
+    source_hdu      =   fo[shdu-1]
+
+    target_names    =   source_hdu.read()['SOURCE']
+    idx_found       =   np.zeros(np.shape(target_names), dtype=bool)        # i.e not found
+
+    sid_colname     =   get_colnames(source_hdu, ['ID_NO', 'SOURCE_ID'])[0]
+
+    sids            =   source_hdu[sid_colname].read()
+    ra              =   source_hdu['RAEPO'].read()*u.deg
+    dec             =   source_hdu['DECEPO'].read()*u.deg
+    target_coords   =   SkyCoord(ra,dec, frame=frame)
+    epoch           =   np.unique(source_hdu.read()['EPOCH'])
+    
+    dic_df = {coord_col:target_coords.to_string('hmsdms', sep=':'), 'fits_target': target_names}
+    return df(dic_df)
+
+def df_search_brightcalib_rfc(fitsfile, rfc_filepath, class_filepath, scanlist_arr, targets=[], 
+                              seplimit=5e3, thres_sep=1e4, crossmatch_sep=600, outfile='', nfilter_sources=20):
+    """
+    TODO: Increase seplimit for sources which were not found by the seplimit 
+        else add name in smile complete list for negative name matches but positive coordinate cross-match
+    
+    """
+    fo              =   FITS(fitsfile, mode='r')
+    shdu            =   fo.movnam_hdu('SOURCE')
+    hdu = fo[shdu-1]
+
+
+    sid_colname = get_colnames(hdu, ['ID_NO', 'SOURCE_ID'])[0]
+    sids = hdu[sid_colname].read()
+    stargets = hdu['SOURCE'].read()
+    dic_targets = dict(zip(stargets, sids))
+    
+    bandfreq = fo['FREQUENCY']['BANDFREQ'].read()
+    reffreq = fo['FREQUENCY'].read_header()['REF_FREQ']
+    bands = set([check_band(freq) for freq in (bandfreq + reffreq).flatten()/1e9])
+
+    cols_req = [f'Fm{band}' for band in bands]
+    
+    
+    df_rfc = rfc_ascii_to_df(rfc_filepath)
+    df_class = parse_class_cat(class_filepath) # '/data/avi/d/smile/smile_complete_table.txt'
+    
+#     df_search_rfc = catalog_search_from_fits(ff, df_rfc, seplimit=150, 
+#                                              thres_sep=5e2, include_not_found=True, 
+#                                              source_name_col='Comnam', verbose=True)
+    
+    coord_search_class = catalog_search_from_fits(fitsfile, df_class, seplimit=seplimit, 
+                                                  thres_sep=thres_sep, 
+                                                  include_not_found=True)
+        
+    rfc_catalog = SkyCoord(df_rfc['coordinate'].values, unit=(u.hourangle, u.deg), frame='icrs')
+    fits_sources = SkyCoord(coord_search_class['coordinate'].values, unit=(u.hourangle, u.deg), 
+                            frame='icrs')
+    
+    idxtarget, idxself, sep2d, dist3d   =   rfc_catalog.search_around_sky(fits_sources, 
+                                                                          seplimit=300*u.mas)
+    
+    df_res_rfcsearch = df()
+
+    # We have searched for all the sources, now searching flux
+    df_rfc['fits_target'] = ''
+    df_rfc.loc[idxself, 'fits_target'] = coord_search_class.reset_index().iloc[idxtarget]['fits_target'].values         # reset_index because the index here is not same as the fits_source, as the later uses .values; so need to reindex
+    df_rfc['sid'] = df_rfc['fits_target'].map(dic_targets)
+    
+    coord_search_class['sid'] = coord_search_class['fits_target'].map(dic_targets)
+    
+    # checking which sources dont have any data in UV_DATA
+    df_rfc_filtered = df_rfc[df_rfc['sid'].isin(set(scanlist_arr))]
+    
+    # search for flux info in each band
+    for col_req in cols_req:
+        df_res_rfcsearch = concat([df_rfc_filtered.sort_values(by=col_req, ascending=False),
+                                    df_res_rfcsearch]).head(nfilter_sources)
+    # add targets
+    df_res_rfcsearch = concat([df_res_rfcsearch,     
+                              coord_search_class[coord_search_class['fits_target'].isin(targets)][['coordinate', 'sep', 'fits_target', 'sid', 'GB6']]]
+                             )
+    
+    df_res_rfcsearch = df_res_rfcsearch.drop_duplicates(['fits_target'])
+    df_res_rfcsearch['sid'] = df_res_rfcsearch['sid'].astype('int')
+    
+    
+    if outfile:
+        with open(outfile, 'w') as of:
+            of.write(df_res_rfcsearch.to_string())
+            
+    return df_res_rfcsearch
+
+# def catalog_search_from_coord(coord, ):
+    
+
+def catalog_search_from_fits(fitsfile, df_catalog, seplimit, thres_sep, source_name_col='Obsname', 
+                             frame='icrs', include_not_found=False, verbose=False, outdir=''):
+    if source_name_col in df_catalog.columns:
+        df_catalog      =   df_catalog.drop_duplicates(subset=source_name_col, keep='first')
+    
+    fo              =   FITS(fitsfile, mode='r')
+    shdu            =   fo.movnam_hdu('SOURCE')
+    source_hdu      =   fo[shdu-1]
+    
+    target_names    =   source_hdu.read()['SOURCE']
+    idx_found       =   np.zeros(np.shape(target_names), dtype=bool)        # i.e not found
+    
+    sid_colname     =   get_colnames(source_hdu, ['ID_NO', 'SOURCE_ID'])[0]
+    
+    sids            =   source_hdu[sid_colname].read()
+    ra              =   source_hdu['RAEPO'].read()*u.deg
+    dec             =   source_hdu['DECEPO'].read()*u.deg
+    target_coords   =   SkyCoord(ra,dec, frame=frame)
+    epoch           =   np.unique(source_hdu.read()['EPOCH'])
+    
+    if not len(epoch)==1: raise ValueError(f'Multiple EQUINOX values are not supported yet : {epoch}')
+    
+    # searching by name first
+    match_res       =   df_catalog[df_catalog[source_name_col].isin(target_names)]
+    
+    if not match_res.empty:
+        idx_found       =   np.in1d(target_names, match_res[source_name_col].values)
+    
+    # since each row found corrosponds to the name match from fits
+    if source_name_col in match_res.columns: match_res            =   match_res.rename(columns={source_name_col:'fits_target'})                     
+        
+    if 'fits_target' in match_res.columns: match_res['sep'] =   match_res.apply(lambda row: compute_sep(row, target_names, target_coords, frame), axis=1 )
+    
+    if any(~idx_found):
+        if verbose: print("  searching by coordinate for..."," ".join(target_names[~idx_found]))
+    
+        catalog                             =   SkyCoord(df_catalog['coordinate'].values, unit=(u.hourangle, u.deg), frame=frame)
+        
+        idxtarget, idxself, sep2d, dist3d   =   catalog.search_around_sky(target_coords[~idx_found], seplimit=seplimit*u.milliarcsecond)
+        df_coord_search                     =   df_catalog.iloc[idxself].copy()
+        df_coord_search['sep']              =   sep2d.milliarcsecond
+        
+        # important in order to keep consistency.
+        df_coord_search['fits_target']      =   target_names[~idx_found][idxtarget]
+        
+        if not match_res.empty:
+            df_coord_search                 =   df_coord_search[match_res.columns]
+            df_coord_search.index =  df_coord_search.index + 10000
+        
+        match_res = concat([match_res, df_coord_search])
+#         match_res = match_res.drop(columns=['RAh', 'RAm','RAs', 'DE-', 'DEd', 'DEm', 'DEs', 'Nobs', 'Nsca', 'Nses', 'Corr'],errors='ignore')
+        if 'coordinate' in match_res:
+            match_res.insert(2, 'coordinate', match_res.pop('coordinate'))
+        if 'sep' in match_res:
+            match_res.insert(0, 'sep', match_res.pop('sep'))
+            
+        
+        if verbose: print(len(idxtarget), "found by coordinate")
+        if verbose: print(sum(idx_found), "found by name")
+        
+        unmatched_indices = np.where(~idx_found)[0]
+        idx_found[unmatched_indices[idxtarget]] = True       
+        
+        
+    if verbose: print(len(target_names[idx_found]), "found of", len(target_names))
+    if verbose: print(len(target_names[~idx_found]), "not found")
+    if include_not_found:
+#         col_usable = ['sep', 'fits_target','coordinate']
+        dic_df = {'coordinate':target_coords[~idx_found].to_string('hmsdms', sep=':'), 'fits_target': target_names[~idx_found],
+                 'sep': None}
+        match_res = concat([match_res, df(dic_df)])
+    return match_res
+

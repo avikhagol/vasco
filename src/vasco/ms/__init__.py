@@ -18,6 +18,7 @@ from astropy import units as u
 import json
 import numpy as np
 from pandas import DataFrame as df
+from typing import List
 
 import glob
 
@@ -37,6 +38,258 @@ tb = table()
 SNR_THRES = 7.0
 
 
+
+def read_df_vis(vis:str, corr: List = [], spw: List =[], dcol:str='DATA', sel_row:List=[]):
+    import polars as pl
+    df_list = []
+    
+    [field_name] = get_tb_data(f"{vis}/FIELD", axs=['NAME'])
+    [antenna_name] = get_tb_data(f"{vis}/ANTENNA", axs=['NAME'])
+    [data_desc_spw] = get_tb_data(f"{vis}/DATA_DESCRIPTION", axs=['SPECTRAL_WINDOW_ID'])
+    
+    tb_data = get_tb_data(
+                        vis, 
+                        axs=['TIME','EXPOSURE','SCAN_NUMBER', 'FIELD_ID', dcol, 
+                             'SIGMA','WEIGHT','ANTENNA1','ANTENNA2','UVW','FLAG', 'DATA_DESC_ID']
+                        )
+
+    time, expos, sid, fid, data, sigma, weight, an1, an2, uvw, flag, data_desc_id = tb_data
+    ncorr, nspw, nrow = data.shape
+    
+    if len(corr)<1:
+        corr = [0] if ncorr==1 else range(0, ncorr)
+    if len(spw)<1:
+        spw = [0] if nspw==1 else range(0, nspw)
+
+    for sel_corr in corr:
+        for sel_chan in spw:
+            df_vis_single = read_df_vis_single(vis, tb_data , field_name, antenna_name, data_desc_spw, sel_corr, sel_chan, sel_row)
+            df_vis_single = df_vis_single.with_columns(pl.lit(sel_corr).alias("corr"), pl.lit(sel_chan).alias("chan"))
+            df_list.append(df_vis_single) 
+            
+    df_vis = pl.concat(df_list, how="vertical")
+
+    return df_vis
+    
+def read_df_vis_single(vis:str, tb_data, field_name, antenna_name, data_desc_spw, sel_corr:int=0, sel_chan:int=0, sel_row:List=[]):
+    """
+    assumes dimensions:
+    (corr, chan, row)
+
+    """
+    import polars as pl
+    time, expos, sid, fid, data, sigma, weight, an1, an2, uvw, flag, data_desc_id = tb_data
+
+    ncorr, nspw, nrow = data.shape
+    if not sel_row: sel_row = (0, nrow)
+    sel_data = data[sel_corr][sel_chan][sel_row[0]:sel_row[1]]
+    sel_real = sel_data.real
+    sel_imag = sel_data.imag
+    sel_flag = flag[sel_corr][sel_chan][sel_row[0]:sel_row[1]]
+
+    u,v,w    = uvw[0][sel_row[0]:sel_row[1]]   ,uvw[1][sel_row[0]:sel_row[1]]   ,uvw[2][sel_row[0]:sel_row[1]]   
+    uvdist   = np.sqrt(u*u + v*v)
+    sel_sigma= sigma[sel_corr][sel_row[0]:sel_row[1]]
+    sel_weight = weight[sel_corr][sel_row[0]:sel_row[1]]
+            
+    data_series = [
+        pl.Series("time", time, dtype=pl.Float64),
+        pl.Series("uvdist", uvdist, dtype=pl.Float64),
+        pl.Series("expos", expos, dtype=pl.Float32),
+        pl.Series("fid", fid, dtype=pl.Int64),
+        pl.Series("sid", sid, dtype=pl.Int64),
+        pl.Series("data_desc_id", data_desc_id, dtype=pl.Int64),
+        pl.Series("an1", an1, dtype=pl.Int64),
+        pl.Series("an2", an2, dtype=pl.Int64),
+        pl.Series("amp", np.abs(sel_data), dtype=pl.Float64),
+        pl.Series("phase", np.angle(sel_data, deg=True), dtype=pl.Float64),
+        pl.Series("real", sel_real, dtype=pl.Float64),
+        pl.Series("imag", sel_imag, dtype=pl.Float64),
+        pl.Series("flag", sel_flag, dtype=pl.Boolean),
+        pl.Series("u", u, dtype=pl.Float64),
+        pl.Series("v", v, dtype=pl.Float64),
+        pl.Series("w", w, dtype=pl.Float64),
+        pl.Series("sigma", sel_sigma, dtype=pl.Float64),
+        pl.Series("weight", sel_weight, dtype=pl.Float64),
+    ]
+
+    df_vis = pl.DataFrame(data_series)
+    
+    df_field_map = (pl.DataFrame([{"fid": fid, "field": name}for fid, name in enumerate(field_name)]) )
+    df_vis = df_vis.join(df_field_map, on="fid", how="inner")
+    
+    df_an_map = (pl.DataFrame([{"an1": an1, "an1_name": name}for an1, name in enumerate(antenna_name)]) )
+    df_vis = df_vis.join(df_an_map, on="an1", how="inner")
+    
+    df_an_map = (pl.DataFrame([{"an2": an1, "an2_name": name}for an1, name in enumerate(antenna_name)]) )
+    df_vis = df_vis.join(df_an_map, on="an2", how="inner")
+
+    df_spw_map = (pl.DataFrame([{"data_desc_id": data_desc_id, "spw": spw}for data_desc_id, spw in enumerate(data_desc_spw)]) )
+    df_vis = df_vis.join(df_spw_map, on="data_desc_id", how="inner")
+    
+    return df_vis
+
+
+def get_dic_an(vis, spw_col):
+
+    tban, tbfeed, tbdesc, tbvis = table(), table(), table(), table()
+    
+    tbvis.open(vis)
+    tbdesc.open(f"{vis}/DATA_DESCRIPTION")
+    tbfeed.open(f"{vis}/FEED")
+    tban.open(f"{vis}/ANTENNA")
+    
+    anname = tban.getcol('NAME')
+
+    if 'ANTENNA_ID' not in tban.colnames():
+        anid = list(range(len(anname)))
+    else:
+        anid = tban.getcol('ANTENNA_ID')
+        
+    dic_an = {k: {'name': v} for k, v in zip(anid, anname)}
+    dic_an
+
+    tbfeed.colnames()
+    if 'ANTENNA_ID' not in tbfeed.colnames():
+        anids = list(range(len(anname)))
+    else:
+        anids = tbfeed.getcol('ANTENNA_ID')
+        for anid in anids:
+            mask = anid==anids
+            feedid = np.unique(tbfeed.getcol('FEED_ID')[mask])
+            dic_an[anid]['feedid'] = list(feedid)
+    for anid in dic_an:
+        mask = (tbvis.getcol('ANTENNA1') == anid) | (tbvis.getcol('ANTENNA2') == anid)
+        descid = np.unique(tbvis.getcol('DATA_DESC_ID')[mask])
+        dic_an[anid]['spw'] = list(tbdesc.getcol(spw_col)[descid])
+        
+    return dic_an
+
+def add_spwid_totab(tb, spwid_missing, warnonly=True, dic_an_spw={}):
+    """
+    NOTE: This code is redundant. 
+    FIXME : This assumes that the FEED1 and FEED2 are always 0. the dic_an_spw now has feedid as well.
+    FIXME: existing bug, mask of antenna selection does not assume mask on spw.
+    """
+    colnames        =   tb.colnames()
+    has_anid        =   'ANTENNA_ID' in colnames
+    has_feedid      =   any(fky in colnames for fky in ['FEED1', 'FEED2', 'FEED_ID'])
+    anmask          =   []
+    
+    if warnonly: tb  =   tb.copy("mem.dat",deep=False, valuecopy=True, memorytable=True)
+    
+    
+    nrows           =   tb.nrows()
+    spwids          =   tb.getcol("SPECTRAL_WINDOW_ID").copy()
+    
+    spwid0_rows = spwids[spwids[0]==spwids]         # HACK: assuming that first spw is available for all rows for the required spw. else use ANTENNA_ID
+    fixed_row_len = len(spwid0_rows)
+    
+    
+    startrow = 0
+    for spwid_add in spwid_missing:
+        
+        if len(spwids[spwid_add==spwids])==0:       # checking if spwid already present
+            if has_anid and dic_an_spw:
+                anmask = np.zeros(tb.nrows(), dtype=bool)
+                for an, _dicrest in dic_an_spw.items():
+                    spws = _dicrest['spw']
+                    if spwid_add in spws:
+                        mask = tb.getcol('ANTENNA_ID') == an
+                        anmask |= mask
+                # print(an,anmask)
+                fixed_row_len = len(anmask)                         # creating a fixed length of row from the fact that SUM(anI_nrows) corrosponds to spwid in uvdata
+            
+            tb.addrows(fixed_row_len)
+            
+            spwid_add_arr = np.zeros(fixed_row_len, dtype=int)+spwid_add
+            print("fixing...", tb.name())
+            for col in colnames:
+                if col!="SPECTRAL_WINDOW_ID":
+                    
+                    
+                    if has_anid and dic_an_spw:                                 # this mask is actually corrosponding the antennaid
+                        # print(f"using mask of len {len(anmask)}")
+                        
+                        if tb.isvarcol(col) and col!='POLARIZATION_TYPE':
+                            vals_orig = tb.getvarcol(col)
+                            vals_new = {}
+                            i_new = 0
+                            for i_old, use in enumerate(anmask):
+                                if use:
+                                    vals_new[f"r{nrows + i_new+1}"] = vals_orig[f"r{i_old+1}"].copy().astype(vals_orig[f"r{i_old+1}"].dtype)
+                                    i_new += 1
+
+                            vals_combined = {**vals_orig, **vals_new}
+
+                            # Sanity check:
+                            if len(vals_combined) != tb.nrows():
+                                raise RuntimeError(f"Expected {tb.nrows()} rows after addrows, but varcol has {len(vals_combined)} entries")
+
+                            tb.putvarcol(col, vals_combined)
+                        else:
+                            # allvals = tb.getcol(col, startrow=0, nrow=nrows)            # value in (0, nrows) where nrows<=allrows; nrows = orig_rows + last_fixed_row_len
+                            vals_orig = tb.getcol(col, startrow=0, nrow=nrows)  # only from existing rows
+                            
+                            # vals = vals_orig[anmask]  # mask only existing
+                        
+                            if vals_orig.ndim == 3:
+                                vals = vals_orig[:, :, anmask]  # assuming shape (chan, pol, row)
+                                expanded_vals = np.concatenate([vals_orig, vals], axis=2)
+                            elif vals_orig.ndim == 2:
+                                vals = vals_orig[:, anmask]     # assuming shape (pol, row)
+                                expanded_vals = np.concatenate([vals_orig, vals], axis=1)
+                            elif vals_orig.ndim == 1:
+                                vals = vals_orig[anmask]
+                                expanded_vals = np.concatenate([vals_orig, vals], axis=0)
+                            else:
+                                raise ValueError(f"Unexpected ndim={vals_orig.ndim} for column {col}")
+                            # expanded_vals = np.concatenate([allvals, vals], axis=-1)
+                            
+                            print(col,": added spws " , str(",".join(np.unique(spwid_add_arr).astype(str))))
+                            tb.putcol(col, expanded_vals)
+                    
+                    
+                else:
+                    spwids = np.append(spwids,spwid_add_arr)
+                    tb.putcol(col, spwids)
+                    
+                if warnonly:print(col, nrows,"->" , nrows+fixed_row_len)
+            startrow += fixed_row_len
+            nrows += fixed_row_len
+    return tb
+
+
+def fix_feedid(vis, spw_col = 'SPECTRAL_WINDOW_ID', warnonly=True, verbose=True):
+    
+    fix_dic = {}
+    tbfeed, tbsys, tbgain, tbvis, tbdesc = table(), table(), table(),table(), table()
+    
+    tbfeed.open(f"{vis}/FEED", nomodify=warnonly)
+    tbsys.open(f"{vis}/SYSCAL", nomodify=warnonly)
+    tbgain.open(f"{vis}/GAIN_CURVE", nomodify=warnonly)
+    tbvis.open(vis)
+    tbdesc.open(f"{vis}/DATA_DESCRIPTION")
+    descid = np.unique(tbvis.getcol('DATA_DESC_ID'))
+    
+    spwidsexpected = tbdesc.getcol(spw_col)[descid]
+    dic_an = get_dic_an(vis, spw_col=spw_col)
+    if spw_col in tbfeed.colnames():
+        alltbs = [tbfeed,tbsys,tbgain]
+        
+        for tbchk in alltbs:
+            fix_dic[str(tbchk.name())] = {'expected':list(spwidsexpected), 'present': list(np.unique(tbchk.getcol(spw_col)))}
+            if not all([spwid in tbchk.getcol(spw_col) for spwid in spwidsexpected]):
+                if warnonly and verbose:
+                    print(f"{tbchk.name()} : missing few values for SPECTRAL_WINDOW_ID")
+                    print(f"expected: {spwidsexpected}, present: {np.unique(tbchk.getcol(spw_col))}")
+                    
+                tbchk = add_spwid_totab(tbchk, spwidsexpected, warnonly=warnonly, dic_an_spw=dic_an)
+                if not warnonly:
+                    tbchk.flush()
+                    tbchk.close()
+                    tbchk.done()
+    return fix_dic
 
 def get_tb_data(vis, axs=[]):
     tb.open(vis)
@@ -760,7 +1013,7 @@ def check_bands_ms(msmd):
     return d
 
 def get_target_in_bands(msmd, target, bands_dict):
-    spws = msmd.spwsforfield(target)
+    spws = msmd.spwsforfield(str(target))
     bands = []
     for band in bands_dict:
         if all(spw_band in list(bands_dict[band]['spws']) for spw_band in list(spws)):
@@ -1126,3 +1379,57 @@ def flag_d(vis, target,flag=True):
             traceback.print_exc()
             success=False
     return flagged_perc, success
+
+def find_phasecenter_inms(fitsfile, vis, class_searchcoord_file, sep=0.85 ):
+    """
+    uses the coordinate, fits_target columns in the dataframe from class_searchcoord_file to find fields need phaseshift when separation >{sep}"
+    """
+    from vasco.util import read_df_out
+    from vasco.fitsio import df_source_fits
+    dic_phase_center = {}
+    
+    df_class_search = read_df_out(class_searchcoord_file)
+    df_fits = df_source_fits(fitsfile)
+
+    df_class_compare = df_class_search[['fits_target', 'sid', 'coordinate']].copy()
+    df_class_compare = df_class_compare.merge(
+        df_fits[['fits_target', 'fits_coordinate']],
+        on='fits_target',
+        how='left'
+    )
+
+    coord1 = df_class_compare['coordinate'].values
+    coord2 = df_class_compare['fits_coordinate'].values
+
+    df_class_compare['sep_arcsec'] = SkyCoord(coord1, unit=(u.hourangle, u.deg), frame='icrs').separation(SkyCoord(coord2, unit=(u.hourangle, u.deg), frame='icrs') ).arcsec
+    df_class_compare = df_class_compare.query(f'sep_arcsec >= {sep}')[['fits_target', 'coordinate', 'sid', 'sep_arcsec']]
+    
+    if not df_class_compare.empty:
+        from vasco.ms import get_tb_data
+        [field_name]               = get_tb_data(f"{vis}/FIELD", axs=['NAME'])
+        
+        field_name = [str(fn) for fn in field_name]
+        dic_phase_center = {}
+
+        fields_forphaseshift = df_class_compare['fits_target'].values
+
+        for field in fields_forphaseshift:
+            try:
+                field_idx = field_name.index(field)
+                field_found = True
+            except:
+                field_found = False
+                field = '0' + field[1:]
+                try:
+                    field_idx = field_name.index(field)
+                    field_found = True
+                except:
+                    field_found = False
+            if not field_found: 
+                raise NameError(f"field {field} not found")
+            else:
+                coord = df_class_compare.loc[df_class_compare['fits_target'] == field]['coordinate'].values[0]
+                coord = SkyCoord(coord, unit=(u.hourangle, u.deg), frame='icrs').to_string('hmsdms', sep=':')
+                dic_phase_center[str(field_idx)] = 'ICRS ' + str(coord)
+
+    return dic_phase_center
