@@ -158,7 +158,7 @@ def rfc_find(write=True):
     filepath        =   rfc_filepath
     if Path(filepath).exists():
         with open(filepath, "r") as cp:
-            rfc_txt =   cp.readlines()[0]
+            rfc_txt =   cp.readlines()[0]  if cp.readlines() else ""
     if write:
         if rfc_txt: 
             filepath    =   rfc_txt
