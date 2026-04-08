@@ -11,10 +11,25 @@ import json
 import subprocess
 
 
+# ------ read ASCII
+
+def clean_ascii_to_polarsdf(ascii_str):
+    import polars as pl
+    lines = [
+        line.strip().strip('|')
+        for line in ascii_str.strip().split('\n')
+        if not (line.startswith('+') or line.strip() == "")
+    ]
+    
+    csv_content = "\n".join(lines)
+    
+    return pl.read_csv(
+        StringIO(csv_content), 
+        separator='|', 
+        try_parse_dates=True
+    ).with_columns(pl.all().str.strip_chars()) 
 
 # -----------
-
-
 
 def save_metafile(metafile, metad):
     with open(str(metafile), 'w') as mf: json.dump(metad, mf)
@@ -116,21 +131,29 @@ def search_rfc_catalog(targets, rfc_filepath, reset=False, seplimit=10, columns=
     return df_res
 
 def run_fitsverify(fitsfile):
-   val = None
-   try:
-      # Aim: run fitsverify and capture output for extra byte
-      result = subprocess.run(["fitsverify", fitsfile], capture_output=True, text=True)
-                              
-      output = result.stdout + "\n" + result.stderr
-      match = re.search(r"File has extra byte\(s\) after last HDU at byte (\d+)", output)
-      
-      if match:
-         val = int(match.group(1))  # Return the extracted number
-      
-   except subprocess.CalledProcessError as e:
-         return f"Error running fitsverify: {e}"
-   
-   return val
+    """Run fitsverify and capture output for extra byte
+
+    Args:
+        fitsfile (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    val = None
+    try:
+        
+        result = subprocess.run(["fitsverify", fitsfile], capture_output=True, text=True)
+                                
+        output = result.stdout + "\n" + result.stderr
+        match = re.search(r"File has extra byte\(s\) after last HDU at byte (\d+)", output)
+        
+        if match:
+            val = int(match.group(1))
+        
+    except subprocess.CalledProcessError as e:
+            return f"Error running fitsverify: {e}"
+
+    return val
 
 def read_inputfile(folder,inputfile='config.inp',):
     """

@@ -3,7 +3,9 @@ from typing import List, Any
 import numpy as np
 from vasco.fits import _gethduname
 from fitsio import FITS
-class SPLIT:
+
+
+class SplitData:
     def __init__(self, inpfits, outfits):
         self.inpfits    =   inpfits
         self.outfits    =   outfits

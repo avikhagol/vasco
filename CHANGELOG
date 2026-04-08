@@ -8,8 +8,10 @@
 ### Fixed
 
 ### Changed
+- `vasco.ms.polars` merged into `vasco.ms.table`
 
 ### Removed
+- removed `vasco.ms.polars`
 
 
 ## [0.2.0]

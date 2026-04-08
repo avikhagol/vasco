@@ -8,6 +8,13 @@
 #include <vector>
 #include "fitsio.h"
 #include <cstring>
+#include <map>
+#include <utility>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+
+// ----------- Process Data
 
 class SplitSources {
     public:
@@ -202,7 +209,7 @@ class SplitSources {
                     }
                     
                     
-                    fits_close_file(in_fptr, &status);  // Close the FITS files
+                    fits_close_file(in_fptr, &status);  
                     print_fits_error(status);
                     fits_close_file(out_fptr, &status);
                     print_fits_error(status);
@@ -211,39 +218,78 @@ class SplitSources {
                 }
 
 
+
 };
 
-void delete_hdu(std::string& fitsfilepath, int hdu_index) {
-    fitsfile* fptr;
-    int status = 0, hdutype;
 
-    const char *input_fits_filename = fitsfilepath.c_str();
-    // int hdui = std::stoi(hdu_index);
-    // Open the FITS file in read/write mode
-    if (fits_open_file(&fptr, input_fits_filename, READWRITE, &status)) {
-        fits_report_error(stderr, status);
-        return;
-    }
+std::string format_fits_card(std::string key, std::string value, std::string comm) {
+    std::stringstream ss;
+    ss << std::left << std::setw(8) << key.substr(0, 8);
+    ss << "= ";
+    ss << std::setw(20) << value;
+    ss << " / " << comm;
     
-    // Move to the specified HDU
-    if (fits_movabs_hdu(fptr, hdu_index, &hdutype, &status)) {
-        fits_report_error(stderr, status);
-        fits_close_file(fptr, &status);
-        return;
-    }
-    
-    // Delete the current HDU
-    if (fits_delete_hdu(fptr, &hdutype, &status)) {
-        fits_report_error(stderr, status);
-    }
-    
-    // Close the FITS file
-    if (fits_close_file(fptr, &status)) {
-        fits_report_error(stderr, status);
-    }
-    
-    std::cout << "HDU " << hdu_index << " deleted successfully from " << input_fits_filename << "\n";
+    std::string card = ss.str();
+    if (card.length() > 80) return card.substr(0, 80);
+    return card + std::string(80 - card.length(), ' ');
 }
+
+void write_key(std::string filep, int pos, std::string key, std::string value, std::string comm) {
+    std::fstream file(filep, std::ios::in | std::ios::out | std::ios::binary); // writes in the pos and shifts
+    if (!file) return;
+
+    std::vector<char> original_block(2880);
+    file.read(original_block.data(), 2880);
+
+    std::string new_card = format_fits_card(key, value, comm);
+    
+    int offset = (pos - 1) * 80;
+
+    std::vector<char> repaired_block;
+    repaired_block.reserve(2880);
+    repaired_block.insert(repaired_block.end(), original_block.begin(), original_block.begin() + offset);
+    repaired_block.insert(repaired_block.end(), new_card.begin(), new_card.end());
+    repaired_block.insert(repaired_block.end(), original_block.begin() + offset, original_block.begin() + (2880 - 80));
+
+    file.seekp(0);
+    file.write(repaired_block.data(), 2880);
+    file.close();
+}
+
+void repair_key(std::string filep, int pos, std::string key, std::string value, std::string comm) {
+    std::fstream file(filep, std::ios::in | std::ios::out | std::ios::binary);  // write in the pos without shifting
+    if (!file) return;
+
+    int offset = (pos - 1) * 80;
+    
+    std::string new_card = format_fits_card(key, value, comm);
+
+    file.seekp(offset);
+    file.write(new_card.c_str(), 80);
+    file.close();
+}
+
+void repair_hdu_key(std::string filep, int hdu_num, int card_pos, 
+                     std::string key, long value, std::string comm, bool shift) {
+    fitsfile* fptr;
+    int status = 0;
+    
+    fits_open_data(&fptr, filep.c_str(), READWRITE, &status);
+    if (status) status = 0; 
+
+    fits_movabs_hdu(fptr, hdu_num, NULL, &status);
+
+    if (shift) {
+        char kname[72], kval[72];
+        fits_read_keyn(fptr, card_pos - 1, kname, kval, NULL, &status);
+        fits_insert_key_lng(fptr, key.c_str(), value, comm.c_str(), &status);
+    } else {
+        fits_update_key_lng(fptr, key.c_str(), value, comm.c_str(), &status);
+    }
+
+    fits_close_file(fptr, &status);
+}
+
 
 
 #endif

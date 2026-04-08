@@ -29,6 +29,12 @@ find_package(pybind11 CONFIG REQUIRED)
 # CFITSIO
 FetchContent_Declare(cfitsio URL https://github.com/HEASARC/cfitsio/archive/refs/tags/cfitsio-${CFITSIO_VERSION}.tar.gz)
 FetchContent_MakeAvailable(cfitsio)
+if(TARGET cfitsio)
+    set_target_properties(cfitsio PROPERTIES 
+        JOB_POOL_COMPILE one_jobs
+        JOB_POOL_LINK one_jobs
+    )
+endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(CFITSIO REQUIRED IMPORTED_TARGET cfitsio)
 
@@ -59,7 +65,7 @@ endif()
 set_target_properties(${FITSIDIUTIL_MODULE} PROPERTIES INSTALL_RPATH "\$ORIGIN:\$ORIGIN/../lib/:\$ORIGIN/../lib64/")
 
 target_link_libraries(${FITSIDIUTIL_MODULE} PRIVATE cfitsio::cfitsio Python3::Python)
-target_include_directories(${FITSIDIUTIL_MODULE} PRIVATE ${cfitsio_SOURCE_DIR} ${sofa_SRC})
+target_include_directories(${FITSIDIUTIL_MODULE} PRIVATE ${cfitsio_SOURCE_DIR})
 install(TARGETS ${FITSIDIUTIL_MODULE} 
         LIBRARY DESTINATION ${SKBUILD_PROJECT_NAME}/fitsidiutil
         RUNTIME DESTINATION ${SKBUILD_PROJECT_NAME}/fitsidiutil)
