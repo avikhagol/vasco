@@ -32,11 +32,10 @@ class ArrayInp(Config):
 # -------------------------------------- Main Class
 
 class FringeDetectionRating:
-    def __init__(self, vis:str, caltable_folder:str=None, n_refant=5, n_calib=6, 
+    def __init__(self, vis:str, caltable_folder:str=None, n_refant=5, n_calib=6, n_scans=10, iter_scan_count=5,
                  selected_sources:List[str]=None, selected_scans:List[int]=None, selected_ants:List[int]=None, selected_spws=[],
-                 gaintables=[], interp=[]):
+                 gaintables=[], interp=[], metafolder="", verbose=False):
         """rates antenna and sources by FFT SNR from the fringefit task.
-
         Args:
             vis (str): measurement set file.
             caltable_folder (str, optional): calibration table folder. Defaults to None.
@@ -48,12 +47,25 @@ class FringeDetectionRating:
             selected_spws (list, optional): filter result for only selected spws. Defaults to [].
             gaintables (list, optional): input gaintables to use for fringefit task. Defaults to [].
             interp (list, optional): input interpolation on gaintables to use for fringefit task. Defaults to [].
+            
+        Example:
+        
+        ```python
+        sr = FringeDetectionRating(vis,selected_sources = ['source-name'])
+        sr.caltable_folder ='somewhere'
+        dic_field, refants, pp_out = sr.exec_FFT_fringefit(multiband=True)
+        res = {'observation': sr.obs.data,'array': sr.arr.data}
+        ```
+        
         """
         
         self.vis                    =   vis
         self.caltable_folder        =   caltable_folder or str(Path(vis).parent.absolute())
         self.n_calib                =   n_calib
         self.n_refant               =   n_refant
+        self.n_scans                =   n_scans
+        self.verbose                =   verbose
+        self.iter_scan_count        =   iter_scan_count
         
         self.dict_antenna           =   an_dic(self.vis)                                    # {int:ANNAME:str,'d':np.float,'STD_TSYS':np.float}
         self.dict_sources           =   get_name_dict(self.vis, 'FIELD')                    # {int:str}
@@ -67,7 +79,7 @@ class FringeDetectionRating:
         self.selected_sources       =   selected_sources or list(self.dict_sources_r.keys())
         self.selected_source_ids    =   [int(sourceid) for sourceid,sourcename in self.dict_sources.items() if sourcename in self.selected_sources]
         self.selected_scans         =   selected_scans
-        
+        self.metafolder             =   Path(metafolder) if metafolder else Path(caltable_folder).parent / "vasco.meta"
         
         self.selected_ants          =   selected_ants or self.tsys_antid
         
@@ -99,23 +111,29 @@ class FringeDetectionRating:
         dic_ant_with_scans = {}
 
         for antid in self.selected_ants:
-            if not antid in dic_ant_with_scans:
+            if antid not in dic_ant_with_scans:
                 dic_ant_with_scans[antid] = {'scans':[], 'name':str(self.dict_antenna[antid]['ANNAME'])}
-                for scs_in_source in self.select_good_scans(nscans=10, anid=antid).values():
+                for scs_in_source in self.select_good_scans(nscans=self.n_scans, anid=antid).values():
                     dic_ant_with_scans[antid]['scans'].extend(scs_in_source)
         
         
         dic_result                                      =   task_fringefit_fft_only(self.vis, dic_ant_with_scans=dic_ant_with_scans, 
-                                                                                    caltable_folder=self.caltable_folder, gt=self.gaintables, interp=self.interp,
-                                                                                    spws=self.selected_spws, multiband=multiband)
+                                                                    iter_scan_count=self.iter_scan_count,
+                                                                    caltable_folder=self.caltable_folder, gt=self.gaintables, interp=self.interp,
+                                                                    spws=self.selected_spws, multiband=multiband, verbose=self.verbose)
         self.dic_field, self.refants, self.pp_out       =   find_refant_fromdf(tbls=dic_result['tbl_names'], an_dict=self.dict_antenna, sources_dict=self.dict_sources, 
-                                                                              n_calib=self.n_calib, n_refant=self.n_refant)
+                                                                    n_calib=self.n_calib, n_refant=self.n_refant)
         
         self.obs.calibrators_instrphase                             =   self.dic_field['NAME']
         self.obs.calibrators_bandpass = self.obs.calibrators_rldly  =   self.obs.calibrators_instrphase[0]
         self.arr.refant                                             =   self.refants
         
         
+        if not self.metafolder.exists():
+            self.metafolder.mkdir(exist_ok=True)
+        save_metafile(self.metafolder / "sources.vasco", metad=self.dic_field)
+        save_metafile(self.metafolder / "refants.vasco", metad={"refant":self.refants})
+        with open(str(self.metafolder / "snrating.out"), "w") as wbuff: wbuff.write(f"{self.pp_out}")
         return self.dic_field, self.refants, self.pp_out
 
 # -------------------------------------- CASA tasks
@@ -153,7 +171,7 @@ def casatask_fringefit(vis:str, fid:str, scannos:str, refant:str, ff_caltable:st
     concatspws      =   'False' if not multiband else 'True'
     gainfield       = []
     res             =   'None'
-    fringefit_cmd = ("""fringefit(vis='{0}',""".format(ms_name_fp)
+    fringefit_cmd   = ("""fringefit(vis='{0}',""".format(ms_name_fp)
                     + """caltable='{0}',""".format(caltable_fp)
                     + """field='{0}',""".format(str(fid))
                     + """spw='{0}',""".format(spw)
@@ -273,12 +291,12 @@ def task_fringefit_fft_only(vis:str, dic_ant_with_scans:dict, caltable_folder:st
                 print(f'{c["g"]}processed{c["x"]}','for scans', scannos, 'with refant', refant)
                 tbl_names.append(v['ff_caltable'])
             else:
-                err_flag = f"Successful fringefit execution but table not found"
+                err_flag = "Successful fringefit execution but table not found"
                 dic_result[f"{refant}___{'_'.join(ff_scans)}"]['err_flag'] = err_flag
                 print(f'{c["r"]}processing failed{c["x"]}','for scans', scannos, 'with refant', refant, f"\nreason : {err_flag}\n")
-                
+    
+    dic_result['tbl_names'] = tbl_names            
     tbl_metafile = f"{str(Path(caltable_folder).absolute() / Path(caltable_folder).name)}.vasco"
-    dic_result['tbl_names'] = tbl_names
     save_metafile(metafile=tbl_metafile, metad=dic_result)
     return dic_result
 
@@ -466,39 +484,6 @@ def find_refant_fromdf(tbls:List[str], an_dict:dict, sources_dict:dict, autocorr
 
 # -------------------------------------- Helpers to get dictionaries reading Measurement Set
 
-def get_ant_scans(vis:str, fids:List):
-    """Dictionary with antenna and scan availability for each field.
-    
-
-    Args:
-        vis (str): measurement set file.
-        fids (List): field ids.
-
-    Returns:
-        Dict: {fid:{antid:set(scans)}}
-    """
-    ant_with_available_scans = defaultdict(lambda: defaultdict(set))
-    
-    tb.open(vis)
-    for fid in fids:
-        
-        subtb = tb.query(query=f'FIELD_ID=={fid}', columns=f'DISTINCT SCAN_NUMBER,ANTENNA1,ANTENNA2')
-            
-        a1 = subtb.getcol("ANTENNA1")
-        a2 = subtb.getcol("ANTENNA2")
-        scans = subtb.getcol("SCAN_NUMBER")
-        for i in range(len(scans)):
-            s = int(scans[i])
-            an1 = int(a1[i])
-            an2 = int(a2[i])
-            
-            ant_with_available_scans[fid][an1].add(s)
-            ant_with_available_scans[fid][an2].add(s)        
-            
-        subtb.close()
-    tb.close()
-    return ant_with_available_scans
-
 def get_scan_durations(vis:str, sids:List[int]):
     """gets a dictionary containing scan duration reading the measurement set file.
 
@@ -592,7 +577,7 @@ def get_df_scans(vis:str, dict_field_ant_with_scans:dict):
     return df_scans
 
 
-def get_best_scans(df_scans:pl.DataFrame, nscans:int):
+def get_best_scans(df_scans:pl.DataFrame, nscans:int)->dict:
     """returns best scans from the scan duration
 
     Args:
@@ -617,3 +602,34 @@ def get_best_scans(df_scans:pl.DataFrame, nscans:int):
     dict_res = {fid: result_df.filter(pl.col("fid") == fid)["scan"].to_list()[0] for fid in result_df["fid"]}
     return dict_res
 
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+    import json
+
+    kwargs = {}
+    if not sys.stdin.isatty():
+        try:
+            kwargs = json.load(sys.stdin)
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON input - {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        parser = argparse.ArgumentParser(description="fringefit for fft s/n rating")
+        parser.add_argument('params', nargs='*', help="Pairs of key=value")
+        args = parser.parse_args()
+        try:
+            for arg in args.params:
+                key, value = arg.split('=', 1)
+                # Optional: Convert string numbers/booleans to Python types
+                if value.lower() == 'true': value = True
+                elif value.lower() == 'false': value = False
+                
+                kwargs[key] = value
+        except ValueError:
+            print("Error: Arguments must be in the format key=value")
+            sys.exit(1) # Exit gracefully
+
+    fr = FringeDetectionRating(**kwargs)
+    fr.exec_FFT_fringefit()

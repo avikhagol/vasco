@@ -125,6 +125,23 @@ class ReadIO {
         fitsfile *fptr = nullptr;
         int status = 0;
         std::string _current_fitsfilepath;
+
+        int ascii_code_to_cfitsio_dtype(int ascii_code) {
+                switch(ascii_code) {
+                    case 73:  // 'I' - ASCII for 'I'
+                        return TINT;      // 41
+                    case 70:  // 'F' - ASCII for 'F'  
+                        return TDOUBLE;   // 82 (or TFLOAT=42 if you prefer)
+                    case 67:  // 'C' - ASCII for 'C'
+                        return TSTRING;   // 43
+                    case 76:  // 'L' - ASCII for 'L'
+                        return TLOGICAL;  // 14
+                    case 88:  // 'X' - ASCII for 'X' (complex)
+                        return TCOMPLEX;  // 84
+                    default:
+                        return TSTRING;   // default to string
+                }
+            }
         
     public:
         HeaderManager header_mgr;
@@ -207,6 +224,128 @@ class ReadIO {
                 status = 0;
             }
         }
+
+        // -------------------- insert header after
+
+        void insert_header_str_after(int hdu_num, const std::string& after_key, const std::string& key, const std::string& value, const std::string& comment) {
+            int status = 0, hdu_type;
+            char card[FLEN_CARD];  // raw 80-char card
+            fits_movabs_hdu(fptr, hdu_num, &hdu_type, &status);
+            fits_read_card(fptr, after_key.c_str(), card, &status);
+            fits_insert_key_str(fptr, key.c_str(), value.c_str(), comment.c_str(), &status);
+            if (status != 0) { print_fits_error(status); }
+        }
+
+        void insert_header_double_after(int hdu_num, const std::string& after_key, const std::string& key, double value, const std::string& comment) {
+            int status = 0, hdu_type;
+            char card[FLEN_CARD];
+            fits_movabs_hdu(fptr, hdu_num, &hdu_type, &status);
+            fits_read_card(fptr, after_key.c_str(), card, &status);
+            fits_insert_key_dbl(fptr, key.c_str(), value, -15, comment.c_str(), &status);
+            if (status != 0) { print_fits_error(status); }
+        }
+
+        void insert_header_int_after(int hdu_num, const std::string& after_key, const std::string& key, long value, const std::string& comment) {
+            int status = 0, hdu_type;
+            char card[FLEN_CARD];
+            fits_movabs_hdu(fptr, hdu_num, &hdu_type, &status);
+            fits_read_card(fptr, after_key.c_str(), card, &status);
+            fits_insert_key_lng(fptr, key.c_str(), value, comment.c_str(), &status);
+            if (status != 0) { print_fits_error(status); }
+        }
+
+        // -------------------- add new headers
+        void insert_header_str(int hdu_num, int position, std::string key, std::string value, std::string comment) {
+            int status = 0, hdu_type;
+            char keyname[FLEN_KEYWORD], val[FLEN_VALUE], comm[FLEN_COMMENT];
+            fits_movabs_hdu(fptr, hdu_num, &hdu_type, &status);
+            fits_read_keyn(fptr, position, keyname, val, comm, &status);
+            fits_insert_key_str(fptr, key.c_str(), value.c_str(), comment.c_str(), &status);
+            if (status != 0) { print_fits_error(status); }
+        }
+
+        void insert_header_double(int hdu_num, int position, std::string key, double value, std::string comment) {
+            int status = 0, hdu_type;
+            char keyname[FLEN_KEYWORD], val[FLEN_VALUE], comm[FLEN_COMMENT];
+            fits_movabs_hdu(fptr, hdu_num, &hdu_type, &status);
+            fits_read_keyn(fptr, position, keyname, val, comm, &status);
+            fits_insert_key_dbl(fptr, key.c_str(), value, -15, comment.c_str(), &status);
+            if (status != 0) { print_fits_error(status); }
+        }
+
+        void insert_header_int(int hdu_num, int position, std::string key, long value, std::string comment) {
+            int status = 0, hdu_type;
+            char keyname[FLEN_KEYWORD], val[FLEN_VALUE], comm[FLEN_COMMENT];
+            fits_movabs_hdu(fptr, hdu_num, &hdu_type, &status);
+            fits_read_keyn(fptr, position, keyname, val, comm, &status);
+            fits_insert_key_lng(fptr, key.c_str(), value, comment.c_str(), &status);
+            if (status != 0) { print_fits_error(status); }
+        }
+
+
+        // one func for header updaes
+    
+        void insert_header_after(int hdu_num, const std::string& after_key, const std::string& key, 
+                         const std::string& value, const std::string& comment, int dtype) {
+            int status = 0, hdu_type;
+            char card[FLEN_CARD];
+            fits_movabs_hdu(fptr, hdu_num, &hdu_type, &status);
+            fits_read_card(fptr, after_key.c_str(), card, &status);
+            
+            int cfitsio_dtype = ascii_code_to_cfitsio_dtype(dtype);
+            
+            switch(cfitsio_dtype) {
+                case TINT:
+                case TLOGICAL: {
+                    long val = std::stol(value);
+                    fits_update_key(fptr, TLONG, key.c_str(), &val, comment.c_str(), &status);
+                    break;
+                }
+                case TDOUBLE:
+                case TFLOAT: {
+                    double val = std::stod(value);
+                    fits_update_key(fptr, TDOUBLE, key.c_str(), &val, comment.c_str(), &status);
+                    break;
+                }
+                case TSTRING:
+                default: {
+                    fits_update_key(fptr, TSTRING, key.c_str(), (void*)value.c_str(), comment.c_str(), &status);
+                    break;
+                }
+            }
+            if (status != 0) { print_fits_error(status); }
+        }
+
+            void insert_header(int hdu_num, int position, const std::string& key, 
+                const std::string& value, const std::string& comment, int dtype) {
+                int status = 0, hdu_type;
+                char keyname[FLEN_KEYWORD], val[FLEN_VALUE], comm[FLEN_COMMENT];
+                fits_movabs_hdu(fptr, hdu_num, &hdu_type, &status);
+                fits_read_keyn(fptr, position, keyname, val, comm, &status);
+                
+                int cfitsio_dtype = ascii_code_to_cfitsio_dtype(dtype);
+                
+                switch(cfitsio_dtype) {
+                    case TINT:
+                    case TLOGICAL: {
+                        long long_val = std::stol(value);
+                        fits_update_key(fptr, TLONG, key.c_str(), &long_val, comment.c_str(), &status);
+                        break;
+                    }
+                    case TDOUBLE:
+                    case TFLOAT: {
+                        double double_val = std::stod(value);
+                        fits_update_key(fptr, TDOUBLE, key.c_str(), &double_val, comment.c_str(), &status);
+                        break;
+                    }
+                    case TSTRING:
+                    default: {
+                        fits_update_key(fptr, TSTRING, key.c_str(), (void*)value.c_str(), comment.c_str(), &status);
+                        break;
+                    }
+                }
+                if (status != 0) { print_fits_error(status); }
+            }
 
         // -------------------- update Data
 
@@ -399,7 +538,7 @@ class ReadIO {
                     }
 
                     if (!use_override) {
-                        // No override for this UV_DATA - copy original
+                        // copy original
                         fits_copy_hdu(fptr, out_fptr, 0, &status);
                         print_fits_error(status);
                         if (verbose) {
@@ -537,7 +676,7 @@ class ReadIO {
                     }
                 }
 
-                // 4. Final Error Check
+                
                 if (local_status) {
                     char err_text[FLEN_ERRMSG];
                     fits_get_errstatus(local_status, err_text);
@@ -597,9 +736,8 @@ class ReadIO {
                             if (last != std::string::npos) s = s.substr(0, last + 1);
                             else s = "";
                             
-                            // --- THE FIX ---
+                            
                             try {
-                                // Try normal string (UTF-8)
                                 str_list.append(py::str(s));
                             } catch (const py::error_already_set& e) {
                                 str_list.append(py::bytes(s));
@@ -743,12 +881,11 @@ class ReadIO {
 
             fits_get_num_hdus(fptr, &num_hdus, &status);                                             // get number of hdus
             print_fits_error(status);
-                                                                                                        // Variables to track the current SOURCE and its start/end times
             int current_source = -1;
             double current_time_start_mjd = 0.0, current_time_end_mjd = 0.0;
             long current_nrows = 0;
             int current_freqid = -1;
-            double current_inttime = 0.0; // Declare current_inttime
+            double current_inttime = 0.0;
             char timeColName[] = "TIME";
             char sourceColName[] = "SOURCE";
             char inttimColName[] = "INTTIM";
@@ -793,8 +930,8 @@ class ReadIO {
                 int freqid;
                 fits_read_col(fptr, TINT, colnum_freqid, i, 1, 1, NULL, &freqid, NULL, &status);
         
-                // Get the number of BANDFREQ values for this FREQID
-                long nbandfreq = 0; // Use long for nbandfreq
+                // get the number of BANDFREQ values for this FREQID
+                long nbandfreq = 0;
                 fits_get_coltype(fptr, colnum_bandfreq, NULL, &nbandfreq, NULL, &status);
                 if (status) {
                 std::cerr << "Error after nbandfreq = " << status << std::endl;
@@ -858,21 +995,17 @@ class ReadIO {
                             return results;
                         }
                 
-                        // Skip rows where SOURCE is not in sids (if sids is not empty)
                         if (filter_by_sids && sids_set.find(source) == sids_set.end()) {
                             continue;
                         }
                 
-                        // Calculate the absolute MJD timestamp
                         double scantime_mjd = time;
                 
-                        // If the SOURCE changes, save the previous SOURCE's data
                         if (source != current_source) {
                             if (current_source != -1) {
-                                // Get the number of BANDFREQ values for the current FREQID
+                                
                                 long nbandfreq = (freqidToBandfreq.find(current_freqid) != freqidToBandfreq.end()) ? freqidToBandfreq[current_freqid] : 1;
                 
-                                // Create the inttime array (e.g., "[1.0 1.0 1.0 1.0]")
                                 std::vector<double> inttimeArray;
                                 for (long j = 0; j < nbandfreq; ++j) {
                                     inttimeArray.push_back(current_inttime);
@@ -881,7 +1014,7 @@ class ReadIO {
                                 double startTime = current_time_start_mjd;//convertMJDToISOT(current_time_start_mjd);
                                 double endTime = current_time_end_mjd;//convertMJDToISOT(current_time_end_mjd);
                 
-                                // Save the previous SOURCE's data
+                                
                                 results.push_back({
                                     startTime,
                                     endTime,
@@ -890,7 +1023,7 @@ class ReadIO {
                                     inttimeArray
                                 });
                             }
-                            // Start tracking the new SOURCE
+                            
                             current_source = source;
                             current_time_start_mjd = scantime_mjd;
                             current_time_end_mjd = scantime_mjd;
@@ -899,7 +1032,6 @@ class ReadIO {
                             current_inttime = inttime; // Update current_inttime
                         } 
                         else {
-                            // Update the end time and increment nrows for the current SOURCE
                             current_time_end_mjd = scantime_mjd;
                             current_nrows++;
 
@@ -911,7 +1043,6 @@ class ReadIO {
                         
                         long nbandfreq = freqidToBandfreq[current_freqid];
                 
-                        // Create the inttime array (e.g., "[1.0 1.0 1.0 1.0]")
                         std::vector<double> inttimeArray;
                         for (long j = 0; j < nbandfreq; ++j) {
                             inttimeArray.push_back(current_inttime);

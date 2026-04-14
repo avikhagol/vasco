@@ -1,0 +1,404 @@
+##### THIS FILE CONTAINS INPUTS THAT CAN BE LEFT #####
+##### AS THE DEFAULT IN MOST CASES               #####
+
+
+#If non-zero: Scale SIMGA by this number in the final averaged MS and WEIGHT accordingly.
+sigmascale = 0
+
+#Activate averaging options in frequency and time.
+#If True, a <ms_name>.avg MS will be created.
+avg_final_ms = True
+
+#Time-averaging interval if avg_final_ms is set.
+#Set to False for no time-averaging. Example: set to '5s' for 5 second averaging.
+# Test to see if the IF plots are affected. 10s, 30s
+avg_final_time = False
+
+#Number of channels to be averaged if avg_final_ms is set.
+#Set to False for no channel-averaging.
+#Set to a very large number to (e.g., 999999) to average over all channels per spw.
+avg_final_channel = 999999
+
+#Average all spw if avg_final_ms is set.
+#May fail with a Segmentation Fault due to a limitation in CASA if there are a different number of
+#channels in the different spws.
+avg_final_spw = False
+
+#If True, a uvfits file will be created from every source specified in observation.inp.
+exportuvfits = True
+
+
+#Name of input flag file. If None, all files with .flagfile_extensions (see parameter below)
+#extensions in the workdir folder will be loaded.
+#Can be an array with elements separated by semicolons.
+#Note that not all observatories will give you a file with flagging commands as metadata.
+#See the flagging.inp file for more information.
+flagfile_name = None
+
+#Possible extensions of flag files.
+#All files with these extensions in the working directory and all its subdirectories
+#will be loaded if flagfile_name=None. Also works with links to files.
+flagfile_extensions = .fg;.FG;.uvflag;.UVFLAG;.uvflg;.UVFLG;.uvfg;.UVFG;.flag;.FLAG;.flg;.FLG;\
+                      .uvflags;.uvflgs;.uvfgs;.flags;.flgs
+
+#Name of input antab file. If None, all files with .antab_extensions (see parameter below)
+#extensions in the workdir folder will be loaded.
+antab_name = None
+
+#Possible extensions of antab files.
+#All files with these extensions in the working directory and all its subdirectories
+#will be loaded if antab_name=None. Also works with links to files.
+#However, there must be only a single antab table
+#where the metadata from all stations is collected.
+antab_extensions = .an;.AN;.antab;.ANTAB;.vlog;.VLOG;.antabfs;.ANTABFS
+
+#Name of input weather file. If None, all files with .wx_extensions (see parameter below)
+#extensions in the workdir folder will be loaded.
+wxfile_name = None
+
+#Possible extensions of weather files.
+#All files with these extensions in the working directory and all its subdirectories
+#will be loaded if wxfile_name=None. Also works with links to files.
+#However, there must be only a single weather table
+#where the metadata from all stations is collected.
+wxfile_extensions = .wx;.WX;.weather;.WEATHER
+
+#Name of input fits-idi file. If None, all files with .fitsidi_extensions (see parameter below)
+#extensions in the workdir folder will be loaded.
+#Can be an array with elements separated by semicolons.
+fitsidi_name = None
+
+#Possible extensions of fits-idi files.
+#All files with these extensions in the working directory and all its subdirectories
+#will be loaded if fits_name=None. Also works with links to files.
+fitsidi_extensions = .uvfits;.fits;.FITS;.idifits;.IDIFITS;.IDI;.IDI0;.IDI1;.IDI2;.IDI3;.IDI4;.IDI5;.IDI6;\
+                     .IDI7;.IDI8;.IDI9;.IDI10;.IDI11;.IDI12;.IDI13;.IDI14;.IDI15;.IDI16;.IDI17;\
+                     .IDI18;.IDI19;.IDI20;.IDI21;.IDI22;.IDI23;.IDI24;.IDI25;.IDI26;.IDI27;.IDI28;\
+                     .IDI29;.IDI30;.IDI31;.IDI32;.IDI33;.IDI34;.IDI35;.IDI36;.IDI37;.IDI38;.IDI39;\
+                     .IDI40;.IDI41;.IDI42;.IDI43;.IDI44;.IDI45;.IDI46;.IDI47;.IDI48;.IDI49;.IDI50;\
+                     .IDI51;.IDI52;.IDI53;.IDI54;.IDI55;.IDI56;.IDI57;.IDI58;.IDI59;.IDI60;\
+                     .IDI61;.IDI62;.IDI63;.IDI64;.IDI65;.IDI66;.IDI67;.IDI68;.IDI69;.IDI70;\
+                     .IDI71;.IDI72;.IDI73;.IDI74;.IDI75;.IDI76;.IDI77;.IDI78;.IDI79;.IDI80;\
+                     .IDI81;.IDI82;.IDI83;.IDI84;.IDI85;.IDI86;.IDI87;.IDI88;.IDI89;.IDI90;\
+                     .IDI91;.IDI92;.IDI93;.IDI94;.IDI95;.IDI96;.IDI97;.IDI98;.IDI99;.IDI100
+
+#Name of input model file. If None, all files with .modelfile_extensions (see parameter below)
+#extensions in the workdir folder will be loaded.
+#Can be an array with elements separated by semicolons.
+modelfile_name = None
+
+#Possible extensions of model files for the observed sources.
+#All files with these extensions in the working directory and all its subdirectories
+#will be loaded if modelfile_name=None. Also works with links to files.
+#Models are identified by sourcenames within the filenames. For example, a file 3C279.mod will be
+#interpreted as a source model for 3C279.
+modelfile_extensions = .mod; .model; .smodel
+
+#Name of input T_rx file. If None, all files with .trecfile_extensions (see parameter below)
+#extensions in the workdir folder will be loaded.
+#Can be an array with elements separated by semicolons.
+#Receiver temperature info is only necessary if an opacity fit is necessary,
+#e.g., for the GMVA and high frequency observations with the VLBA.
+trecfile_name = None
+
+#Possible extensions of trec files.
+#All files with these extensions in the working directory and all its subdirectories
+#will be loaded if trecfile_name=None. Also works with links to files.
+trecfile_extensions = .trec; .TREC; .trx; .TRX
+
+
+#File which will be written based potential on DPFU and gain curve information in a GAIN_CURVE
+#extension table of the FITS-IDI input files if no separate ANTAB table is available.
+gc_dpfu_fromidi_file = gc_dpfu_fromidi.ANTAB
+
+#File that is used when converting the polynomial gain curves from an ANTAB tables to VLA-type.
+#Used as basis to generate a gc calibration table.
+gc_conversion_file = antab_to_vlatype.gc
+
+#File which contains corrections for mount types.
+#See auxiliary.fix_antenna_mounts().
+#Should be needed for EHT data from before 2018 only.
+#Does nothing if set to 'None' or if the file does not exist.
+antenna_mount_corrections_file = eht.mounttypes
+
+#Applymode of calibration solutions with applycal.
+#Most useful: calflag or calonly; see help applycal.
+#Cannot be set for individual calibration tables.
+applycal_applymode = calflag
+
+#If not False, then make a backup of the flagversion immediately after loading the data
+#with the name <restore_flags> and restore to that every time the pipeline is run.
+#This flagversion will only contain flags from data with zero weights but all flags from
+#previous calibration steps or flagging will be restored. Not used in quickmode (-q option).
+#WARNING: Setting this to False will break the -r command line option!
+restore_init_flags = init_flagversion
+
+
+#Where to store the dictionary with the determined refants for each scan.
+#Files will be written for calibrators (.cal) and science targets (.sci).
+store_scan_refants = scan_refants.stored
+
+#Where to store the dictionary with the optimized fringe parameters (solints).
+#Files will be written for calibrators (.cal) and science targets (.sci) in two separate steps.
+#These files are necessary for the mublitband fringe-fit.
+store_optimal_fringe_params = fringe_params.stored
+
+#If True and the fringe parameters have been determined from a previous run,
+#then these parameters are read in and used again instead of re-running the optimization procedure.
+#The parameter is overwritten to False if the pipeline is called with the -f option
+#(useful if a different set of solints want to be tried for example).
+#These parameters give the refant and fringe-fit solint for eachs scan.
+fringe_params_load = True
+
+#The ms_metadata class
+#(stored info about correlations, antennas, spw, sources, selected scans per source)
+#will be read to and written from that file.
+#So the parameters do not need to be determined again every time the pipeline is run
+#for the same dataset.
+store_ms_metadata = ms_metadata.stored
+
+#If True and the ms_metadata parameters have been determined from a previous run,
+#then these parameters are read in and used again.
+#The parameter is overwritten to False if the pipeline is called with the -m option.
+#(useful if a different set of sources is used for example).
+ms_metadata_load = True
+
+
+#Name of directory for diagnostic output - will be created in workdir, so no absolute path please.
+#For every run this folder is written with the current UTC time attached to its name.
+#Not allowed to have a underscore (_) in the name.
+diagdir = diagnostics
+
+
+### Below, the names for the diagnostic output folders/logs are provided for steps  ###
+### in the pipeline which are not direct calibration methods.                       ###
+### If set to None, then no plots will be generated.                                ###
+### All paths are relative to the diagnostics diagdir folder.                       ###
+
+#Scratch directory for various temporary files,
+scratchdir = tmp_files
+
+#Input parameters used in the pipeline.
+diag_inp_params = inp_params.txt
+
+#Command line arguments from the call to the pipeline.
+diag_cmd_args = command_line_arguments.txt
+
+#Summary of observation with listobs() task - this file is required for the code!
+diag_listobs = list.obs
+
+#File which keeps track of the steps executed - this file is required for the code!
+diag_steps_completed = completed_calibration_steps.list
+
+#Amount of flagged data.
+diag_flags = flags.list
+
+#Overview of FFT fringes.
+diag_fringe_overview = fringes_overview.csv
+
+#Plots and data of SNR vs solint from FFT of fringefit() which are used to estimate the
+#coherence time.
+diag_optimize_solint = PLOTS_OPTIMAL_FRINGE_SOLINT_SEARCH
+
+#Folder for (calibrated) visibilities on certain baselines.
+#see pipe_modules/diagnostics.py->plot_calibrated_visibilities().
+diag_calib = PLOTS_VISIBILITIES
+
+#If flagging is enabled, the name of the flagging directory which will be created in the
+#diagdir directory. All flagging algorithms will write files with flag commands in there
+#and .CFG files in that directory are read in and their flags are applied.
+flag_dir = FLAGTABLES
+
+#Where to save diagnostics (T_rx fits) if an opacity correction is performed.
+diag_opac_corr = OPACITY_CORRECTION
+
+### End of names for diagnostic output folders.                                     ###
+
+
+#If True, use the superior jplotter over CASA-plotms if jplotter or singularity are available and
+#in your PATH.
+diag_calib_use_jplotter = True
+
+#Make POSSM and VPLOT like plots when using jplotter.
+# useful to see all scans in overview plot
+diag_calib_make_overviewplots = True
+
+#If True, only RR and LL (if available) will be plotted for diag_calib.
+#Else, RL,LR,RR,LL (if available) plots will be made.
+# changed to True as we dont have polarization science case
+diag_calib_only_parallel_hands = True
+
+#If True, do not make plots of auto-correlations for diag_calib. Always True for jplotter.
+diag_calib_only_crosscorr = True
+
+#If True, only make plots of visibilities on baselines to the reference antenna for diag_calib.
+#Else, make plots on all baselines. Always False for jplotter.
+diag_calib_only_to_refant = True
+
+#Which quantities are to be plotted vs time and vs freq for diag_calib (csv list).
+#Example: amp,phase. Always amp,phase for jplotter.
+diag_calib_yvals = phase
+
+
+#Which scans to be used for a) diagnostic plots to check how the different calibration steps
+#worked, b) to optimize parameters by trial and error fringe fitting, and c) for determining
+#flag in frequency space that are to be applied at all times. Can set them as
+#*,*,*,...;x_1,x_1,x_1,...;x_2,x_2,x_2,...;... 
+#(meaning ['*,*,*,...','x_1,x_1,x_1,...','x_2,x_2,x_2,...','...']),
+#where both the * and x are used for a) and only the * are used for c). b) is done seprately for 
+#* and each x_i (they are supposed to be from different sources and the optimal parameters are
+#applied per source).
+#Default: inp_selected_scans=None, then * are scans on all_calibrators and x_i are
+#scans per science_target. The code pipe_modules/diagnostics.py->get_selected_scans() will
+#determine these with the constraints of being evenly diveded across the experiment while having
+#as many antennas present as possible.
+#WARNING: If scans are set manually, each * must be from the same source, just as each x_i.
+#         But the sources must all be different. If a source is not present in selected_scans,
+#         then it will not be fringe-fitted!
+#SETTING SCANS MANUALLY HERE IS NOT YET IMPLEMENTED.
+selected_scans =  None
+
+#The nominal number of scans per source for selected_scans.
+num_selected_scans = 5
+
+
+#Verbosity: If True, more information will be printed for the different tasks.
+verbose = True
+
+#Minimum amount of time [in s] between new scans, used for indexing.
+scanreindexgap = 15
+
+#If True, the code will not raise an exception if there is no ANTAB table found.
+#Instead, it will only print a warning. But amplitude calibration will fail.
+pass_missing_antab = True
+
+#If True, the code will not raise an exception if there are no fits-idi files present.
+#Should only be used when you already have the data as measurement set.
+#If True, any online/metadata flags should be applied to the MS before running the pipeline.
+pass_missing_fitsidi = True
+
+#If True, only the most recent flagbackups from applycal and flagdata are kept to save disk space.
+only_single_flagbackup = True
+
+#How the measurement set is to be partitioned (MMS creation) for MPI-CASA:
+#If 'None', no partitioning will be done and all MPI processing is done sequentially.
+#If 'fitsidi', partitioning will only be done when the raw data is present as fits-idi files.
+#If 'MS', partitioning will only be done when the raw data is present as MS.
+#If 'MS_clean', the old MS will be deleted after partitioning into a MMS, but no partitioning
+#will be done for fits-idi files.
+#If 'MS_fitsidi', partitioning is done for both MS and fits-idi raw data.
+#If 'MS_fitsidi_clean', partitioning will be done for both MS and fits-idi raw data and an old
+#MS will be deleted if present.
+MS_partitioning = MS_fitsidi
+
+#Estimated overhead factor concerning the required disk space when converting FITS-IDI files
+#to a MS. The factor will be between 2 and 4.
+fitsidi_to_MS_overhead = 3.8
+
+#Can give a filepath for the name of a temporary MS that will be created via mstransform()
+#to make sure that the spectral windows are sorted in ascending order with frequency.
+sort_MS_spws = None
+
+#If MPI memory safeguards are enabled (see below), this parameter is used to estimate how long it
+#takes [in seconds] to read all data into memory when fringe-fitting a single scan.
+ff_mem_settletime = 30
+
+#If MPI memory safeguards are enabled (see below), this parameter sets the maximum percentage of
+#memory that the pipeline is allowed to occupy.
+ff_mem_threshold = 95
+
+#Invokes processing limits for mpi-parallelization. Set to 0 to always use full available CPU
+#computing power.
+#Else, can set to some number N. This will be the maximum number of scans that are to be processed
+#in parallel at the same time by MPI-applycal. In that case, also fringe-fitting will be done 
+#more carefully - only so many scans are processed in parallel as free memory allows.
+mpi_memory_safety = 0
+
+#Set to True to skip MPI parallel processing on long fringefit solints for
+#data with many frequency channels to avoid memory issues.
+#If set to 'safety', the mpi_memory_safety (see constants.inp) framework will be used for the
+#fringefit steps with long solution intervals.
+#use safety in production
+long_solint_no_mpi = False
+
+#Fringe-fitting in parallel across scans: If True, uses MPI to speed up fringefit() with CPU power.
+ff_mpi = True
+
+#If True, and fft_solint_estimation is not set to 'sqrt' in array.inp, the fft solint estimation
+#step will exit early if a good enough solint is found.
+#Set to False to get the FFT SNRs for more solints to get a better view on the coherence times
+#at the expense of computational time.
+#Can also give an integer N>0 to do at least N iterations for baselines where the SNR is not 
+#increasing with solint before exiting with a good enough solint.
+fft_solint_quick = 5
+
+#If True, allow the fringe solution interval to float:
+#The code will find the nearest value to your solint, such that for every scan, the division
+#scan_length/solint has a remainder of zero. For an optimal segmentation of scans into solints.
+#Else: Set to False.
+floating_fringe_solint = True
+
+#Maximum number of iterations for the least-squares refinement of the fringe-fitter.
+fringe_maxiter_lsquares = 500
+
+#If True, fringe-fit SNR cutoffs are reduced according to the reduced FFT serach space given by
+#fringe_delay_windows and fringe_rate_windows.
+fringe_SNR_cutoff_float_Perr = True
+
+#If the fringe_solint is given as array, then use certain scans to do trial and error analysis for
+#the optimal solution interval.
+#If 'selected', then use selected_scans. In that case, a nearest neighbor
+#interpolation on a per-source basis to the closest selected scan will be used to get the solution
+#interval for any scan. Warning: This may not work when not enough refants are specified.
+#If 'all', then use all scans.
+fringe_searchscans = all
+
+#If True, replace flagged solutions from each multi-band fringe-fit step by interpolation between
+#good/valid values. This is done per scan and antenna.
+#In this mode, solutions are also extrapolated if less than x=10 valid solutions are present in an
+#interval. Instead of setting this variable to 'True', can also specify a number x explicitly.
+#If False, flagged data is kept flagged, so that for solints<scan_durations, portions of data where
+#no fringes are found are flagged.
+fringefit_mb_interpolate_over_flags = False
+
+#If True, all loaded input models will be normalized to unity amplitude.
+normalize_inputmodel = False
+
+#If True, use experimental method from Avinash Kumar to get the ms_metadata faster.
+fast_metadata_AK = True
+
+### Plotting sizes for every call to plotms() for diagnostic plots.        ###
+### See pipe_modules/diagnostics.py->task_plotms_general().                ###
+### Choose values appropriate for your screen.                             ###
+### Default values are given behind the # (as comments)                    ###
+### These parameters are ignored when jplotter is used                     ###
+pl_symbolsize        = 36 #12
+pl_flaggedsymbolsize = 36 #12 
+pl_titlefont         = 36 #0
+pl_xaxisfont         = 24 #0
+pl_yaxisfont         = 24 #0
+pl_width             = 4000 #-1
+pl_height            = 3000 #-1
+### End of plotting sizes for every call to plotms() for diagnostic plots. ###
+
+### Plotting parameters for diagnostic plots of calibration solutions.      ###
+pc_fig_xsize_inches = 18
+pc_fig_ysize_inches = 14
+pc_fig_fontsize     = 25
+pc_fig_markersize   = 125
+pc_file_ext         = png
+### End of plotting sizes for every call to plotcal() for diagnostic plots. ###
+
+### Indexing scheme for solutions in a fringefit table ###
+F_0PHAS = 0
+F_0DELA = 1
+F_0RATE = 2
+F_0DISP = 3
+F_1PHAS = 4
+F_1DELA = 5
+F_1RATE = 6
+F_1DISP = 7
+F_01LEN = 8
+
+# ALMA antenna name
+ALMA_antname = AA

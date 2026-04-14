@@ -405,10 +405,10 @@ def identify_sources_fromtarget(scanlist_seq, sourcenames, target_source, other_
             # HACK:        to get None values back from id_flux_for_sources using caliblist_file=True
             flux_df  = id_flux_for_sources(sourcenames, alls, caliblist_file, band) if caliblist_file else id_flux_for_sources(sourcenames, alls, True, band)
         flux_df = flux_df.sort_values(by=['flux'], ascending=False)
-        print(flux_df)
+        # print(flux_df)
 #         print(flux_df)
         if IdS.isphref: # check whether science target is a phaseref calibrator
-            if verbose: print('is phref')            
+            # if verbose: print('is phref')            
             if (target_source in calib_from_seq):
 #                 if verbose: print('target is calib')
                 if s['calibrators_phaseref']:
@@ -425,7 +425,8 @@ def identify_sources_fromtarget(scanlist_seq, sourcenames, target_source, other_
                 if not IdS.isphref: 
                     msg='bright enough'
                 else :
-                    msg='no suitable calibrator pair found'
+                    # msg='no suitable calibrator pair found'
+                    msg = "phref mode not activated."
                     IdS.isphref = False
                 
                 s['calibrators_phaseref'] = None
@@ -434,7 +435,7 @@ def identify_sources_fromtarget(scanlist_seq, sourcenames, target_source, other_
                     """
                     since the isphref=True changes to False due to bright target
                     """
-                    msg='bright enough'
+                    # msg='bright enough'
                     s['calibrators_phaseref'] = None
                 else:
                     s['calibrators_phaseref'] = [ps]

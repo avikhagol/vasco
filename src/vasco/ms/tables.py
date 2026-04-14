@@ -1,5 +1,4 @@
-from casatools import table
-
+from casatools import table, msmetadata
 import polars as pl
 import numpy as np
 from scipy.spatial import distance
@@ -8,6 +7,7 @@ from pathlib import Path
 
 from typing import List
 from collections import defaultdict
+from vasco.util import check_band
 
 #  utilities
 tb = table()
@@ -169,12 +169,22 @@ def get_name_dict(vis, tab):
     return res_dic
 
 def get_ant_scans(vis:str, fids:List):
+    """Dictionary with antenna and scan availability for each field.
+    
+
+    Args:
+        vis (str): measurement set file.
+        fids (List): field ids.
+
+    Returns:
+        Dict: {fid:{antid:set(scans)}}
+    """
     ant_with_available_scans = defaultdict(lambda: defaultdict(set))
     
     tb.open(vis)
     for fid in fids:
         
-        subtb = tb.query(query=f'FIELD_ID=={fid}', columns=f'DISTINCT SCAN_NUMBER,ANTENNA1,ANTENNA2')
+        subtb = tb.query(query=f'FIELD_ID=={fid}', columns='DISTINCT SCAN_NUMBER,ANTENNA1,ANTENNA2')
             
         a1 = subtb.getcol("ANTENNA1")
         a2 = subtb.getcol("ANTENNA2")

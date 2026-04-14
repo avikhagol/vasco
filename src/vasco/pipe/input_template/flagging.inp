@@ -1,0 +1,106 @@
+##### THIS FILE CONTAINS INPUTS FOR THE DIFFERENT FLAGING ALGORITHMS.         #####
+##### FOR EACH FLAGGING ALGORITHM, THE FIRST PARAMETER ENABLES OR DISABLES IT.#####
+##### THE SECOND PARAMETER GIVES THE NAME OF THE OUTPUT CASA UVFLG FILE.      #####
+##### IF THE THIRD PARAMETER IS FALSE THEN THE WRITTEN FLAGS ARE NOT APPLIED. #####
+
+
+#Get timeflags from metadata of online flag table(s).
+#See constants.inp for how I look for these files.
+#Can add lines to flag single polarizations of stations, see the flag_singlepol_station() function
+#in pipe_modules/flagging_algorithm.py.
+flag_from_metadata = True
+aply_from_metadata = True
+
+
+#Get timeflags that are attached to the fits-idi file.
+#Typically these are found for data from the VLBA correlator.
+#file_from_idifile will be an extension to the name of each fits-idi file that has a FG table.
+flag_from_idifile = True
+file_from_idifile = .CFG
+aply_from_idifile = True
+
+
+#Flag edge channels.
+#perc_: If True then numo_edge_channels flags a percentage of channels in each spw.
+#       Else numo_edge_channels gives an absolute number.
+#numo_: Amount to be flagged at the start of each spw, amount to be flagged at the end of each spw
+#       (two comma separated values).
+flag_edge_channels = True
+file_edge_channels = EC.CFG
+aply_edge_channels = True
+perc_edge_channels = True
+numo_edge_channels = 5,5
+
+
+#Flag uncalibrated scans explicitly.
+#It may be useful to store the information about scans that could not be calibrated for some
+#reason explicitly in a flagfile. Currently implemented for polarization experiments when
+#fringe-fitting where you may want to flag scans where the reference antenna is not present because
+#re-referencing phase solutions between different antennas can be problematic.
+flag_uncalib_scans = True
+file_uncalib_scans = UNCALIB_SCANS.CFG
+aply_uncalib_scans = True
+
+
+#Find RFI like spikes and dropouts in autocorr vs frequency.
+#Flag the spikes also in the cross-correlations as their power can leak.
+#For details see pipe_modules/flagging_algorithm.py->fg_autocorr_vs_freq().
+#thre_: Threshold for flagging which is based on the difference between neighboring channels.
+#       The smaller, the more data will be flagged.
+#medi_: If True, then the derivatives are examined wrt. the median derivative.
+#         -> False is useful when the difference to outliers is a known number for all antennas.
+#         -> True is useful when the difference does not vary much across spw but can be 
+#            different for different stations.
+#mspw_: If True, find outliers wrt median per spw; if False use median of all spw combined.
+#       Only used if medi_autocorr_vs_freq = True.
+#         -> Useful for single channel outliers, but does not catch the case where a
+#            complete spw is corrupted. Could be reconciled by decreasing extd_.
+#alls_: If True, find outliers wrt the median derivative of all scans and spw combined.
+#       Overwrites the medi_ ad mspw_ parameters above. Can be slow due to I/O.
+#         -> Useful when large protions of the data are corrupted.
+#minn_: Minimum amount of valid channels that must be present for flags to be computed.
+#absl_: Also flags all channels < absl_autocorr_vs_freq.
+#extd_: Flag an spw completely if the relative amount of flagged channels exceeds this number.
+#       Set to None to disable this option.
+flag_autocorr_vs_freq = False
+file_autocorr_vs_freq = AC_F.CFG
+aply_autocorr_vs_freq = True
+thre_autocorr_vs_freq = 100.
+medi_autocorr_vs_freq = True
+mspw_autocorr_vs_freq = True
+alls_autocorr_vs_freq = False
+minn_autocorr_vs_freq = 12
+absl_autocorr_vs_freq = 0.01
+extd_autocorr_vs_freq = 0.1
+
+
+#Flag outliers in autocorr vs time series for each station.
+#Reveals situations like arrays not phased up or data dropouts (for example).
+#For details see pipe_modules/flagging_algorithm.py->fg_autocorr_vs_time().
+#thre_: Threshold for flagging which is based on the fractional difference to the median
+#       of a scan. The smaller, the more data will be flagged.
+#absl_: Also flags all time where the frequency averaged amplitude is < absl_autocorr_vs_time.
+#minn_: Minimum amount of valid integrations that must be present for flags to be computed.
+#extd_: Connect flags to a continuous timeseries if the separate integrations are less than
+#       extd_autocorr_vs_time seconds apart.
+flag_autocorr_vs_time = False
+file_autocorr_vs_time = AC_T.CFG
+aply_autocorr_vs_time = True
+thre_autocorr_vs_time = 0.5
+absl_autocorr_vs_time = 0.75
+minn_autocorr_vs_time = 6
+extd_autocorr_vs_time = 30
+
+
+#Flag data at the beginning and end of each scan ('quack') for certain antennas.
+#It is quite common that the first few seconds of a scan are bad because of antennas arriving late
+#on source. This flagging step is applied directly to the data if enabled and no flagging file is
+#written.
+#ants_: List of antennas that are to be flagged (quacked). Set to '' to apply flags to all
+#       antennas.
+#begi_: Number of seconds flagged at the start of each scan. Set to 0 to skip this step.
+#endb_: Number of seconds flagged at the end of each scan. Set to 0 to skip this step.
+flag_quacking = False
+ants_quacking = ''
+begi_quacking = 10
+endb_quacking = 0

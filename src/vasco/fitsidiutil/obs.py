@@ -2,7 +2,26 @@ from astropy.time import Time
 import polars as pl
 from vasco.fitsidiutil.io import FITSIDI
 import numpy as np
-from .lib import get_yyyymmdd
+from itertools import count
+from .op import get_yyyymmdd
+
+from typing import List
+from dataclasses import dataclass, field
+
+
+# -------------------------------------------------------------
+
+pl.Config(
+            ascii_tables                =   True,       # Use +--+ instead of Unicode boxes
+            tbl_hide_column_data_types  =   True, 
+            tbl_hide_dataframe_shape    =   True,
+            tbl_width_chars             =   10000,
+            float_precision             =   4,
+            tbl_rows                    =   -1,
+            tbl_cols                    =   -1
+            )
+
+# -------------------------------------------------------------
 
 class ListObs:
     def __init__(self, fitsfilepath, sids=None, time_scale_data='tai', scangap=15, scale_dateobs='utc'):
@@ -55,7 +74,7 @@ class ListObs:
     
         prev_end_mjd = Time(0, format='mjd', scale=self.time_scale_data)
     
-        scan_n = 0
+        row_idx = 0
         dict_listobs = {}
     
         for row in rowd:
@@ -66,8 +85,8 @@ class ListObs:
                 
                 inttime_rounded = np.round(np.array(row.inttime), 3).tolist()
                 
-                dict_listobs[scan_n] = {
-                    'scan_id': scan_n,
+                dict_listobs[row_idx] = {
+                    'scan': row_idx+1,
                     'start_time': time_start_mjd.isot, 
                     'end_time': time_end_mjd.isot, 
                     'source_id': row.source, 
@@ -75,7 +94,7 @@ class ListObs:
                     'inttime': inttime_rounded
                 }
                 self.scanlist.append(row.source)
-                scan_n += 1
+                row_idx += 1
                 
             prev_end_mjd = time_end_mjd
 
@@ -98,4 +117,101 @@ class ListObs:
         cols.insert(3, "source")
         df_listobs = df_listobs.select(cols)
         return df_listobs
-        
+    
+def merge_and_reorder(base_dict, *new_dicts):
+    seen_obs = set()
+    pairs = []
+
+    additional_dicts = [d for d in new_dicts if d]
+    is_merge = len(additional_dicts) > 0
+    
+    for d in filter(None, [base_dict, *new_dicts]):
+        lookup = {str(k): v for k, v in d.get('sources', {}).items()}
+        for obs in d.get('listobs', {}).values():
+            key = (obs.get('start_time'), obs.get('end_time'))
+            if key in seen_obs:
+                continue
+            seen_obs.add(key)
+
+            old_id = str(obs.get('sid') or obs.get('source_id'))
+            pairs.append((obs, lookup.get(old_id, 'Unknown')))
+    if is_merge:
+        pairs.sort(key=lambda x: x[0].get('start_time', '9999'))
+
+    name_to_id = {}
+    final_sources = {}
+    final_listobs = {}
+    id_counter = count(1)
+
+    for i, (obs, source_name) in enumerate(pairs):
+        if source_name not in name_to_id:
+            new_id = next(id_counter)
+            name_to_id[source_name] = new_id
+            final_sources[str(new_id)] = source_name
+
+        new_scan = i + 1
+        final_listobs[str(i)] = {
+            **{k: v for k, v in obs.items() if k not in ('sid', 'source_id', 'scan')},
+            'scan': new_scan,
+            'source_id': name_to_id[source_name],
+        }
+
+    return {
+        'scanlist': list(range(1, len(final_listobs) + 1)),
+        'listobs': final_listobs,
+        'sources': final_sources,
+    }
+    
+@dataclass
+class ObservationSummary:
+    """_summary_
+
+    Args:
+        fitsfilepaths (list, required): _description_. Defaults to [].
+    """
+    fitsfilepaths:List
+    sids:List = field(default_factory=list)
+    scangap=15
+    dic_summary : dict = field(default_factory=dict)
+    
+    
+    
+    def get(self,):
+        dic_list =[]
+        if isinstance(self.fitsfilepaths, str):
+            self.fitsfilepaths = [self.fitsfilepaths]
+        for fitsfile in self.fitsfilepaths:
+            listobs_data = ListObs(fitsfilepath=fitsfile, sids=self.sids, scangap=self.scangap)
+            dic_new = {"scanlist": listobs_data.scanlist,
+                        "listobs": listobs_data.dict_listobs,
+                        "sources": listobs_data.dic_sources,
+                        }
+            dic_list.append(dic_new)
+            self.dic_summary = merge_and_reorder(*dic_list)
+        self
+    
+    def to_polars(self):
+        if not self.dic_summary:
+            self.get()
+        df_listobs = pl.DataFrame(list(self.dic_summary['listobs'].values()))
+        if not df_listobs.is_empty():
+            df_listobs = df_listobs.with_columns([
+                pl.col("start_time").str.to_datetime(),
+                pl.col("end_time").str.to_datetime()
+            ])
+    
+        dic_sources = self.dic_summary['sources']
+        df_listobs = df_listobs.with_columns(
+            pl.col("source_id").cast(pl.String).replace(dic_sources).alias("source")
+        )
+
+        cols = df_listobs.columns
+        cols.remove("source")
+        cols.insert(3, "source")
+        df_listobs = df_listobs.select(cols)
+        return df_listobs
+    
+    def scanlist(self):
+        if not self.dic_summary:
+            self.get()
+        return self.dic_summary['scanlist']

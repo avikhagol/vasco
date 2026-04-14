@@ -1,0 +1,108 @@
+##### THIS FILE CONTAINS INPUTS THAT SHOULD BE SET #####
+##### FOR EACH NEW DATASET                         #####
+
+
+#Name of the measurement set that will be used.
+#It will be created if fits-idi files are used as input.
+#Must be different from the name of the fits-idi input file(s) and cannot contain spaces or commas.
+ms_name = VLBI.ms
+
+#Absolute path to the working directory. Here the fits file(s) or MS must be found.
+#If not present, the MS will be created here, together with folders for logs and diagnostic output.
+#Can also be set to '$pwd', which will be expanded to the parent directory of the input folder.
+#NOTE: For CASA MPI to work properly, the input folder has to be in the workdir!
+workdir = $pwd
+
+##
+#  ** If you make changes to any of the sources listed below, you will have to       **
+#  ** pass the -m command line argument to picard to re-determine the metadata!      **
+##
+
+#Name of the science target(s) of the experiment.
+#Write a comma separated list if there are more then one.
+#Science targets are typically weak sources which cannot be used for calibration tasks.
+#If all observed targets can be set as some type of calibrator below, set science_target = None.
+science_target = SGR_A
+
+
+### Lists for the different types of calibrators.                                              ###
+### Write a comma separated lists if there are more than one.                                  ###
+### The same source can of course occur multiple times                                         ###
+###   (same calibrator for instrumental phase and delay calibration and bandpass for example). ###
+### Put None if a certain calibrator is not needed                                             ###
+###   (e.g., no phase referencing or no polarization experiment).                              ###
+
+#Bright calibrators for instrumental phase and delay calibration.
+calibrators_instrphase = 3C279, NRAO530
+
+#Bright calibrators for complex bandpass calibration.
+#If bandtype_cmplx_bandpass = 'BPOLY' is set in array.inp, only a single source can be set here,
+#since POLY bandpasses cannot be averaged.
+calibrators_bandpass = 3C279
+
+#Bright calibrators for rl delay and phase offsets.
+#Should always be set, also for non-polarization experiments to do the fringe-fitting correctly.
+#If set to None, the rl delay calibration will be skipped.
+calibrators_rldly = 3C279
+
+#Calibrators for D-term calibration.
+#Must be polarized and observed over a wide range of parallactic angles for every antenna.
+#D-terms should be solved in a post-processing step after calibrators have been imaged.
+#If set to None, the D-term calibration will be skipped.
+calibrators_dterms = None
+
+#Phase-referencing sources.
+#If set, the phase-referencing mode is activated.
+#For a list of comma separated science_targets, use a corresponding csv list here.
+#Example: science_target = s1, s2, s3 and calibrators_phaseref = p1, p2, p3 means that
+#p1 is used as phaseref source for s1, p2 is used for s2, and p3 is used for s3.
+#If the experiment also contains science targets which do not require phase referencing, then
+#picard should be run again with calibrators_phaseref=None and the -rfms command line arguments.
+calibrators_phaseref = None
+
+### End of calibrator lists.                                                   ###
+
+
+#Whether or not to also fringe-fit the science targets themselves in phase-referencing mode.
+#Set to False for very weak science targets, then only the fringe solutions from
+#calibrators_phaseref are applied to the science targets.
+#Set to True if the science targets are strong enough for a residual fringe-fit. In that case,
+#after a transfer of fringe solutions from calibrators_phaseref, the science targets themselves
+#are fringe-fitted as well, to take out residual phase/delays/rates.
+#Generally, this should be False for astrometry. It should be True when the calibrator is far away
+#from the science target and/or at higher frequency observations.
+phaseref_ff_science = False
+
+#Parameters that enable and control the spectral line calibration mode.
+#Set to False for continuum observations.
+#Otherwise, the channel or frequency range of the line can be given for one or multiple sources.
+#Channels are given as spw:chan numbers, frequencies as ...GHz. For example:
+#spectral_line=0:6                           for one science_target, fringe-fit only channel number
+#                                            6 in spectral window number 0.
+#spectral_line=1:2~8                         channel range 2-8 in spw 1.
+#spectral_line=5.123GHz                      select the single channel closest to 5.123GHz.
+#spectral_line=22.3GHz~22.4GHz               channel range between 22.3 and 22.4 GHz.
+#spectral_line=1:6; 2:5~8; 1GHz~2GHz; 3GHz   for four science_targets (separated by ;),use channel
+#                                            6 in spw 1, channels 5 to 8 in spw 2, channels between
+#                                            1GHz-2GHz, the closest channel to 3GHz, respectively.
+#The selected line channels must be within a single spectral window! Hence, process the data
+#separately with different pipeline runs when there are multiple line spectral windows.
+#If the spectral_line mode is set, the science_target(s) will not be used for the scalar bandpass
+#calibration and no delays are fitted for the science_target(s).
+#If needed, normal phase+delay+rate phase-referencing can be set via calibrators_phaseref.
+#You will then probably want to set phaseref_ff_science=True to correct the rates.
+#For spectral line observations, setting long_solint_no_mpi=False in constants.inp should also
+#be safe.
+#If set to 'search', the code will pick the channel with the highest amplitude in the auto-
+#correlation spectra. The determined channel will also be written into a
+#'spectral_line_peak_channel.txt' file in the working directory.
+#The search is done before the first science target fringefit step.
+spectral_line = False
+
+#The spectral_line = search option picks the peak channel in each scan. This option controls how
+#much variations are allowed in channel numbers. Variations can come from Doppler shift and source
+#variability. If line_var = 0, the median line channel will be picked for all scans. Otherwise,
+#deviating locations will be replaced by nearest-neighbor interpolation. Any phase errors hat could
+#occur in this process will later be corrected when self-calibrating the data from all channels to
+#the Doppler-corrected peak line channel during imaging.
+line_var = 10

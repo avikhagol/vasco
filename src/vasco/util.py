@@ -9,7 +9,8 @@ from collections import defaultdict
 from pathlib import Path
 import json
 import subprocess
-
+import numpy as np
+import shutil
 
 # ------ read ASCII
 
@@ -30,6 +31,93 @@ def clean_ascii_to_polarsdf(ascii_str):
     ).with_columns(pl.all().str.strip_chars()) 
 
 # -----------
+
+
+def check_band(freq, bands=None):
+        """
+        Input
+        ---
+
+        freq            (float)
+                        value of the reference fequency in GHz
+
+        bands           (dict)
+                        dictionary of bands containing numpy array of limiting values of range of the band.
+
+        Return
+        ---
+        
+        band closest to S,C,X,U,K,Q,W of observation
+
+        https://science.nrao.edu/facilities/vlba/docs/manuals/oss/bands-perf
+        """   
+        band = freq
+        if not bands:
+            bands = {
+            'S' : np.array([2.0, 2.6]),
+            'C' : np.array([3.5, 6.4]),
+            'X' : np.array([7.401, 8.8]),
+            'U' : np.array([11.8, 15.7]),
+            'K' : np.array([20.0, 25.0]),
+            'Q' : np.array([40.0, 46.0]),
+            'W' : np.array([80.0, 90.0]),
+        }
+        compare = 999.0
+        for k,v in bands.items():
+            val = (np.abs(v-freq)).min()
+
+            if compare > val: 
+                band = k
+                compare = val
+        return band
+
+def read_inputfile(folder,inputfile='.inp'):
+    """Read the input file and return a dictionary with the parameters.
+
+    Returns
+    ---
+
+    (params, files, input_folder)
+
+    """
+    params = defaultdict(list)
+    input_folder= None
+    files=glob.glob(f'{folder}/*{inputfile}',recursive=True)
+    if not files: files=glob.glob(f'{folder}/*/*{inputfile}',recursive=False)
+    if not files: files=glob.glob(f'{folder}/*/*/*{inputfile}',recursive=False)
+    if files:
+        input_folder = str(Path(files[-1]).parent) + '/'
+        for filepath in files:
+            if inputfile in filepath:
+                with open(filepath,'r') as f:
+                    pr=f.read().splitlines()
+                    for p in pr:
+                        if '#' in p:
+                            continue
+                        elif '=' in p:
+                            k,v=p.split('=')
+                            # check for leading zeros
+                            if str(v).strip() and v.strip()[0] == '0':
+                                v   =   str(v).strip()
+                                
+                            else:
+                                try:
+                                    v=int(v)
+                                except:
+                                    try:
+                                        v=float(v)
+                                    except:
+                                        v=str(v).strip()
+                                        if "*" in v:
+                                            try:
+                                                v = glob.glob(f'{v}', recursive=True)
+                                            except:
+                                                v = str(v)
+                                        else:
+                                            v = v.lower() == 'true' if (any(boolv == v.lower() for boolv in ['true', 'false'])) else v
+                            params[k.strip()]=v
+                            
+    return params, files, input_folder
 
 def save_metafile(metafile, metad):
     with open(str(metafile), 'w') as mf: json.dump(metad, mf)
@@ -154,57 +242,6 @@ def run_fitsverify(fitsfile):
             return f"Error running fitsverify: {e}"
 
     return val
-
-def read_inputfile(folder,inputfile='config.inp',):
-    """
-    Read the input file and return a dictionary with the parameters.
-    """
-    params = {}
-    input_folder= ''
-    files=glob.glob(f'{folder}/*{inputfile}',recursive=True)
-    if not files: files=glob.glob(f'{folder}/*/*{inputfile}',recursive=False)
-    if not files: files=glob.glob(f'{folder}/*/*/*{inputfile}',recursive=False)
-    
-    if files:
-        input_folder = str(Path(files[-1]).parent) + '/'
-        for filepath in files:
-            if '.inp' in filepath:
-                with open(filepath,'r') as f:
-                    pr=f.read().splitlines()
-                    for p in pr:
-                        if '#' in p:
-                            continue
-                        elif '=' in p:
-                            k,v=p.split('=')
-                            try:
-                                v=int(v)
-                            except:
-                                try:
-                                    v=float(v)
-                                except:
-                                    v=str(v).strip()
-                                    if any(s in v for s in ['~',',']):
-                                        v=v.split(',')
-                                        av=[]
-                                        for a in v:
-                                            if '~' in a:
-                                                av=a.split('~')
-                                                av=list(range(int(av[0]), int(av[1])+1))
-                                            else:
-                                                try:
-                                                    av+=[int(a)]
-                                                except:
-                                                    av=v
-                                        v=av
-                                        
-                                    if ',' in v:
-                                        v=v.split(',')
-                                        v=[int(a) for a in v if a]
-                                    
-                                    elif 'True' in v: v=v.lower()=='true'
-                                    elif 'False' in v:v=v.lower()=='true'
-                            params[k.strip()]=v                             # type: ignore
-    return params, files, input_folder
 
 
 def create_config(params, out='config.inp', lj=1, rj=1, verbose=True):
@@ -611,3 +648,104 @@ def parse_class_cat(filepath, skiprows=7):
     df_res['coordinate'] = df_res['RADEC'].apply(format_coord)
     df_res = df_res.drop(columns=['RADEC'],errors='ignore')
     return df_res
+
+
+# ____________________________________
+
+
+
+# --------- colors
+c = {
+    "b": "\033[1m",   # Bold
+    "d": "\033[2m",   # Dim
+
+    # Normal Colors
+    "k": "\033[30m",  # Black
+    "r": "\033[31m",  # Red
+    "g": "\033[32m",  # Green
+    "y": "\033[33m",  # Yellow
+    "bl": "\033[34m", # Blue
+    "m": "\033[35m",  # Magenta
+    "c": "\033[36m",  # Cyan
+    "w": "\033[37m",  # White
+}
+
+
+X  = "\033[0m"
+
+# _____________________________________
+
+
+
+def casadir_find(vasco_data_dir, write: bool = True):
+    import readline
+    readline.set_completer_delims('\t\n=')
+    readline.parse_and_bind("tab: complete")
+    cp_txt, do, auto = '', 'y', 'y'
+    casa_path = f"{vasco_data_dir}/casa_path.txt"
+    casadir = ''
+    if Path(casa_path).exists():
+        with open(casa_path, "r") as cp:
+            cp_txt = cp.readlines()[0]
+            if cp_txt:
+                auto = 'no'
+                casadir = cp_txt
+                print(f"There is a CASA path already written: {cp_txt}")
+    if write:
+        if cp_txt:
+            print(f"{c['c']} Are you sure you want to proceed overwriting?{X}")
+            do = input("(y/n)")
+        if str(do).lower() in ["y", "yes"]:
+            print("Please enter your monolithic casa directory "
+                  "(eg /path/to/casa-CASA-xxx-xxx-py3.xxx/bin/):")
+            casadir = input()
+            with open(casa_path, 'w') as o:
+                o.write(f"{casadir}/")
+        try:
+            subprocess.run([f"{casadir}/casa", '-v'], shell=False,
+                           stdout=subprocess.DEVNULL)
+        except FileNotFoundError:
+            print(f"{c['r']}Failed!{X} The path '{casadir}' is not a valid casa directory")
+            print("Proceed with automatic search? (y/n):")
+            auto = input()
+    if str(auto).lower() in ["y", "yes"]:
+        casadir = Path(str(shutil.which("casa"))).resolve().parent
+
+    if Path(casadir).exists():
+        print(f"{c['g']}Success!{X} Found this casa directory:{c['g']} {casadir}{X}")
+    if not Path(casadir / 'mpicasa').exists():
+        print("Failed! mpicasa was not found")
+    else:
+        casadir = Path(casadir)
+        subprocess.run([f"{str(casadir)}/casa", '-v'], shell=False,
+                       stdout=subprocess.DEVNULL)
+        subprocess.run([f"{str(casadir)}/mpicasa", '-h'], shell=False,
+                       stdout=subprocess.DEVNULL)
+
+    print(f"casa_path : {casa_path}")
+    if not write:
+        return casadir
+
+
+def rfc_find(rfc_filepath, write: bool = True) -> str:
+    import readline
+    readline.set_completer_delims('\t\n=')
+    readline.parse_and_bind("tab: complete")
+    rfc_txt, do = '', 'y'
+    filepath = rfc_filepath
+    if Path(filepath).exists():
+        with open(filepath, "r") as cp:
+            lines = cp.readlines()
+            rfc_txt = lines[0] if lines else ""
+    if write:
+        if rfc_txt:
+            filepath = rfc_txt
+            print(f"There is a path already written: {rfc_txt}")
+            print(f"{c['c']} Are you sure you want to proceed overwriting?{X}\n\n")
+            do = input("(y/n)")
+        if str(do).lower() in ["y", "yes"] and not rfc_txt:
+            print("Please enter the path for the ASCII file:")
+            rfc_txt = input()
+        with open(filepath, 'w') as o:
+            o.write(f"{rfc_txt}")
+    return rfc_txt

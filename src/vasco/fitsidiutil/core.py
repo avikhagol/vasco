@@ -1,7 +1,7 @@
 from typing import Any, TYPE_CHECKING
 from ._core import ReadIO, split, RowData, HeaderManager, HeaderCard, repair_hdu_key
 
-__all__ = ["split","ReadIO","__doc__", "__version__", "RowData", "HeaderManager", "HeaderCard", 'repair_hdu_key']
+__all__ = ["split","ReadIO","__doc__", "RowData", "HeaderManager", "HeaderCard", 'repair_hdu_key']
 
 if TYPE_CHECKING:
     from vasco.fitsidiutil import ReadIO

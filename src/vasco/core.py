@@ -1,46 +1,9 @@
 from pathlib import Path
-
+import numpy as np
+from vasco.sources import check_band
 from casacore.tables import table, taql
 # from casatools import table
 
-import numpy as np
-def check_band(freq, bands=None):
-        """
-        Input
-        ---
-
-        freq            (float)
-                        value of the reference fequency in GHz
-
-        bands           (dict)
-                        dictionary of bands containing numpy array of limiting values of range of the band.
-
-        Return
-        ---
-        
-        band closest to S,C,X,U,K,Q,W of observation
-
-        https://science.nrao.edu/facilities/vlba/docs/manuals/oss/bands-perf
-        """   
-        band = freq
-        if not bands:
-            bands = {
-            'S' : np.array([2.0, 2.6]),
-            'C' : np.array([3.5, 6.4]),
-            'X' : np.array([7.401, 8.8]),
-            'U' : np.array([11.8, 15.7]),
-            'K' : np.array([20.0, 25.0]),
-            'Q' : np.array([40.0, 46.0]),
-            'W' : np.array([80.0, 90.0]),
-        }
-        compare = 999.0
-        for k,v in bands.items():
-            val = (np.abs(v-freq)).min()
-
-            if compare > val: 
-                band = k
-                compare = val
-        return band
     
 def get_unflagged_data(tb, fid, dscids, above_weightzero=True, autocorr=False):
     query = f"SELECT * FROM $tb WHERE all(not all(FLAG) and FIELD_ID==$fid and (DATA_DESC_ID in $dscids)"

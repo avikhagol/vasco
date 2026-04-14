@@ -1050,7 +1050,8 @@ def coordinate_for_target(vis, target, sourcenames):
     
     return oth, list(c.keys()), sv
 
-def identify_sources_fromtarget_ms(vis, target_source, caliblist_file=None, flux_thres=0.150, min_flux=0.025, ncalib=20, flux_df=None, sourcenames=None, hard_selection=False, metafolder=None):
+def identify_sources_fromtarget_ms(vis, target_source, caliblist_file=None, flux_thres=0.150, min_flux=0.025, ncalib=20, flux_df=None, 
+                                   sourcenames=None, hard_selection=False, metafolder=None):
     """
     TODO: change caliblist_file name to calibrator catalog file
     """
@@ -1093,7 +1094,7 @@ def identify_sources_fromsnr_ms(vis, target_source, caliblist_file=None, snr_met
     mf_dic                                  =   read_metafile(snr_metafile)
     if caliblist_file is None: caliblist_file                          =   mf_dic['NAME']
     msmd.open(vis)
-    sourcenames=get_sourcenames(msmd)
+    sourcenames                             =   get_sourcenames(msmd)
     # sourcenames                             =   {}
     # for i,fid in enumerate(mf_dic['FIELD_ID']):
     #     sourcenames[fid]    =   mf_dic['NAME'][i]

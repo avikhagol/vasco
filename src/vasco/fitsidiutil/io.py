@@ -4,10 +4,23 @@ from traceback import print_exc
 
 from typing import Type, Dict, Optional, List, TypeAlias, Union, Any
 import polars as pl
+from pathlib import Path
+from warnings import warn
 
 FitsValue: TypeAlias = Union[str, int, float, bool]
 HeaderCardDict: TypeAlias = Dict[str, Union[str, FitsValue, int]]
 
+
+
+pl.Config(
+            ascii_tables                =   True,       # Use +--+ instead of Unicode boxes
+            tbl_hide_column_data_types  =   True, 
+            tbl_hide_dataframe_shape    =   True,
+            tbl_width_chars             =   10000,
+            float_precision             =   4,
+            tbl_rows                    =   -1,
+            tbl_cols                    =   -1
+            )
 
 # --------------------------------------------------------------
 
@@ -31,6 +44,10 @@ FITS_TYPE_MAP = {
 }
 
 # --------------------------------------------------------------
+
+
+def read_idi(fitsfile, mode='r', **read_kwargs):
+    return FITSIDI.quickread(fitsfile, mode=mode, **read_kwargs)
 
 class FITSIDI:
     """
@@ -85,8 +102,13 @@ class FITSIDI:
             dtype_map = {}
             
             for card in card_list:
-                clean_kwargs[card.key] = card.value
-                dtype_map[card.key] = card.type
+                dtype = card.type
+                python_type = FITS_TYPE_MAP[dtype]['type']
+                if str(python_type) == "bool":
+                    clean_kwargs[card.key] = str(card.value)#.startswith("T") == True
+                else:
+                    clean_kwargs[card.key] = python_type(card.value)
+                dtype_map[card.key] = dtype
             
             hdu_history = header_mgr.history.get(hdu_num, [])
             hdu_comments = header_mgr.comments.get(hdu_num, [])
@@ -100,8 +122,8 @@ class FITSIDI:
             ))
         return hdu_objects
         
-    def fix_naxis(self):
-        self._reader.repair_naxis()
+    # def fix_naxis(self):  # TODO: method to add NAXIS when NAXIS is not present, CFITSIO throws error in normal circumstances.
+    #     self._reader.repair_naxis()
     
     def check_extrabytes(self, verbose=True):
         extra_byte_location = None
@@ -125,9 +147,24 @@ class FITSIDI:
     def iter_read(self, total_rows, size_chunk=50_000):
         for start_row in range(0, total_rows, size_chunk):
             rows_to_read = min(size_chunk, total_rows - start_row)
-            current_hdu = self.read(rows_to_read, start_row=start_row)
-            yield current_hdu
-            current_hdu = None
+            current_hdu_chunk = self.read(rows_to_read, start_row=start_row)
+            yield current_hdu_chunk
+            current_hdu_chunk = None
+    
+    @classmethod
+    def quickread(cls, fitsfile, mode='r', **read_kwargs):
+        """read the table data using chunk, by default reads everything
+
+        Args:
+            max_chunk (int, optional): maximum number of chunks. Defaults to None.
+            start_row (int, optional): row to start readin from. Defaults to 0.
+            chunk_cols (list, optional): filter chunking only on the selected columns. Defaults to ['UV_DATA'].
+
+        Returns:
+            hdul (idiHDUList)
+        """
+        with cls(fitsfile).open(mode) as fo:
+            return fo.read(**read_kwargs)
         
     def read(self, max_chunk=None, start_row=0, chunk_cols=['UV_DATA']):
         """read the table data using chunk, by default reads everything
@@ -166,7 +203,7 @@ class FITSIDI:
                     end_row         =   total_rows
                     _start_row      =   0
                 
-                if len(chunk_cols) and not (header.extension_name in chunk_cols):
+                if len(chunk_cols) and (header.extension_name not in chunk_cols):
                     end_row         =   total_rows
                     _start_row      =   0
                 
@@ -260,7 +297,31 @@ class IdiHDUCardList(UserList):
             return self[key]
         except KeyError:
             return default
-    
+    def _add_key(self, key: str, value: Any, dtype:int, comment: str = "", position: int = None, after: str = None):
+        """
+        Appends or inserts a new card. Raises if key already exists.
+        position : 0-based index to insert before
+        after    : insert after a named keyword (takes priority over position)
+        """
+        search_key = key.upper()
+        for card in self.data:
+            if card['key'] == search_key:
+                raise KeyError(f"Keyword '{search_key}' already exists. Use update_key to modify it.")
+
+        new_card = {'key': search_key, 'value': value, 'comment': comment, 'dtype': dtype}
+        
+        if after is not None:
+            after_key = after.upper()
+            for i, card in enumerate(self.data):
+                if card['key'] == after_key:
+                    self.data.insert(i + 1, new_card)
+                    return
+            raise KeyError(f"Anchor keyword '{after_key}' not found for insertion.")
+
+        if position is not None:
+            self.data.insert(position, new_card)
+        else:
+            self.data.append(new_card)
     
     def keys(self):
         return [card['key'] for card in self.data]
@@ -343,11 +404,13 @@ class IdiHDUList(UserList):
         return "\n".join(lines)
     
     def __delitem__(self, index):
+        
+        # if isinstance(index, str):
+        #     warn(f"HDU index number was not used!", stacklevel=2, category=UserWarning)
         hdu_to_remove = self[index]
         hdu_num = hdu_to_remove.hdu_num
-        self._reader.delete_hdu(hdu_num)
-        
-        super().__delitem__(index)
+        hdu_to_remove._reader.delete_hdu(hdu_num)
+        super().__delitem__(hdu_num)
         
         for i, hdu in enumerate(self):
             hdu.hdu_num = i
@@ -370,7 +433,7 @@ class IdIHDU:
         self._staged_table      =   {}
         self._parent             =   parent
         self._is_modified       =   None
-        
+        self._staged_new_header  =  {}   # (value, comment, position, after)
         for attr in dir(header_data):
             if not attr.startswith('_'):
                 value = getattr(header_data, attr)
@@ -436,8 +499,9 @@ class IdIHDU:
     def filter_inplace(self, mask):
         """Filters the internal table data using a boolean mask.
         example:
-        rm_rows = np.array([True, False, True, True, False]) 
+        
         rm_rows = np.isin(np.array(hdul[hdu_name]['ANNAME'])[:], [an])
+        rm_rows = np.array([True, False, True, True, False]) 
         hdul[hdu_name].filter_inplace(~rm_rows)
         """
         self._tb_data = self.df.filter(mask).to_dict(as_series=False)
@@ -446,15 +510,18 @@ class IdIHDU:
             self.update_key('NAXIS2', new_naxis2)
             
         self._staged_hdudata = self.df.filter(mask).to_dict(as_series=False)
-        print(f"use .update() to write to disk.")
+        print("use .update() to write to disk.")
+    
+    def update_cell(self, colname: str, idx: int, value):
+        col = self._table_data[colname]
+        col[idx] = value
+        self._staged_hdudata[colname] = col
     
     def update(self):
-        """
-        loops through staged changes and calls the C++ writer for each.
-        """
-        if not (self._staged_hdudata or self._staged_header):
+        if not (self._staged_hdudata or self._staged_header or self._staged_new_header):
             print("no changes to update.")
             return
+
         if self._staged_hdudata:
             for colname, value in self._staged_hdudata.items():
                 self._reader.write_table_column(
@@ -464,23 +531,83 @@ class IdIHDU:
                     start_row=0
                 )
             self._staged_hdudata.clear()
-            
+
         if self._staged_header:
             for key, (new_value, comment) in self._staged_header.items():
                 dtype_code = self.header.get_dtype(key, C)
-        
-                if dtype_code == I: 
+                if dtype_code == I:
                     self._reader.update_header_int(self.hdu_num, key, int(new_value), comment)
                 elif dtype_code == F:
                     self._reader.update_header_double(self.hdu_num, key, float(new_value), comment)
                 elif dtype_code == L:
                     val = 1 if str(new_value).upper() in ['T', 'TRUE', '1'] else 0
                     self._reader.update_header_int(self.hdu_num, key, val, comment)
-                else: # 'C'
+                else:
                     self._reader.update_header_str(self.hdu_num, key, str(new_value), comment)
             self._staged_header.clear()
+
+        if self._staged_new_header:
+            for key, (str_value, comment, position, after, dtype) in self._staged_new_header.items():
                 
-            
+                if after is not None:
+                    self._reader.insert_header_after(
+                        self.hdu_num, after, key, str_value, comment, dtype
+                    )
+                elif position is not None:
+                    self._reader.insert_header(
+                        self.hdu_num, position, key, str_value, comment, dtype
+                    )
+                else:
+                    # Append at end - use add methods
+                    if dtype == I:
+                        self._reader.add_header_int(self.hdu_num, key, int(str_value), comment)
+                    elif dtype == F:
+                        self._reader.add_header_double(self.hdu_num, key, float(str_value), comment)
+                    elif dtype == L:
+                        self._reader.add_header_int(self.hdu_num, key, 1 if str_value == 'T' else 0, comment)
+                    else:
+                        self._reader.add_header_str(self.hdu_num, key, str_value, comment)
+
+            self._staged_new_header.clear()
+        
+    def _infer_dtype(self, value: Any) -> int:
+        if isinstance(value, bool):  return L
+        if isinstance(value, int):   return I
+        if isinstance(value, float): return F
+        return C
+    
+    def add_key(self, key: str, new_value: Any, dtype: int = None, comment: str = "", position: int = None, after: str = None):
+        """
+        Stages a new header card for insertion.
+        
+        Args:
+            key: Keyword name
+            new_value: Value to store
+            dtype: FITS type code (I, F, C, L from FITS_TYPE_MAP) - auto-inferred if None
+            comment: Keyword comment
+            position: 0-based index to insert at (converted to 1-indexed for CFITSIO)
+            after: Insert after this keyword name (takes priority over position)
+        """
+        ukey = key.upper()
+        if ukey in self._staged_header or ukey in self._staged_new_header:
+            raise KeyError(f"Keyword '{ukey}' already exists. Use update_key to modify it.")
+        
+        if dtype is None:
+            dtype = self._infer_dtype(new_value)
+        
+        str_value = str(new_value)
+        if dtype == L:
+            numeric_value = 1 if str(new_value)[0].upper() == "T" else 0
+            str_value = str(numeric_value)  # Convert to string "1" or "0"
+        
+        cpp_position = position
+        # if position is not None:
+        #     cpp_position = position + 1  # Convert to 1-indexed for CFITSIO
+        
+        self._staged_new_header[ukey] = (str_value, comment, cpp_position, after, dtype)
+        self.header._add_key(ukey, new_value, dtype=dtype, comment=comment, 
+                            position=position, after=after)
+    
     def delete_key(self, key:str):
         protected = ['SIMPLE', 'BITPIX', 'NAXIS', 'XTENSION', 'PCOUNT', 'GCOUNT', 'END']
     

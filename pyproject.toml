@@ -34,7 +34,8 @@ dependencies = [
   "scikit-learn",
   "polars",
   "protobuf==3.20.3",
-  "typer",      
+  "typer",
+  "importlib_resources>=5.0; python_version < '3.9'",
 ]
 
 [tool.pytest.ini_options]
@@ -42,13 +43,16 @@ minversion = "6.0"
 addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
 testpaths = ["tests"]
 
+[tool.setuptools.package-data]
+"vasco.pipe" = ["perl/*.pl"]
+
 [project.optional-dependencies]
 dev = ["pytest>=3.8"]
 all = ["pyvirtualdisplay","casatools", "casatasks", "casampi"]
 test = ["pytest"]
 
 [project.scripts]
-vasco = "vasco:cli"
+vasco = "vasco:cli_new"
 fitsidiutil = "vasco.fitsidiutil.cli:fitsidiutil_cli"
 
 [tool.scikit-build]

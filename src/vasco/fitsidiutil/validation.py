@@ -3,12 +3,13 @@ from dataclasses import dataclass, field, asdict
 from typing import Any, List
 from collections import UserList
 from typing import NamedTuple
+import inspect
 import polars as pl
 import numpy as np
 import subprocess
 from collections import Counter
 from pathlib import Path
-from .lib import get_yyyymmdd, _getcolname, _gethduname
+from .op import get_yyyymmdd, _getcolname, _gethduname
 from .io import FITSIDI
 
 import warnings
@@ -21,21 +22,21 @@ class ValidationResult:
     msg             : str       =   ''
     fixed           : bool      =   False
     need_fixing     : bool      =   False
-    detail          : Any       =   None
+    detail          : str       =   ""
     bad_data        : List[Any] =   field(default_factory=list)
 
 code_desc = {
-        'binary'                    :   f"binary data found in table values",
-        'extra_byte'                  :   f"extra byte found due to padding",
-        'empty'                     :   f"empty values found",
-        'date'                      :   f"date format wrong",
-        'duplicate'                :   f"dulicate entries in data",
-        'zeros'                     :   f"leading zeros in digit like source name",
-        'multifreqid'               :   f"multiple freqid present",
-        'anmap'                     :   f"antenna mapping wrong",
-        'array'                     :   f"column array doesnt exist",
-        'col_spell'                  :   f"column spelled wrong",
-        "primary"                   :   f"primary header check for fitsidi standards"
+        'binary'                    :   "binary data found in table values",
+        'extra_byte'                  :   "extra byte found due to padding",
+        'empty'                     :   "empty values found",
+        'date'                      :   "date format wrong",
+        'duplicate'                :   "dulicate entries in data",
+        'zeros'                     :   "leading zeros in digit like source name",
+        'multifreqid'               :   "multiple freqid present",
+        'anmap'                     :   "antenna mapping wrong",
+        'array'                     :   "column array doesnt exist",
+        'col_spell'                  :   "column spelled wrong",
+        "primary"                   :   "primary header check for fitsidi standards"
     }
 
 class IdiValidatorBase(ABC):
@@ -57,7 +58,7 @@ class IdiValidatorBase(ABC):
         return code_desc.get(self.code, self.code)
     
     def result(self, hdu: str, col: str, msg: str, **kwargs) -> ValidationResult:
-        """Helper to create a ValidationResult with the current checker's code."""
+        """Helper to create a ValidationResult with the current validator's code."""
         return ValidationResult(code=self.code,hdu=hdu,key=col,msg=msg,**kwargs)
     
     def bin_to_str(self, s):
@@ -69,10 +70,14 @@ class ValidationReport(UserList[ValidationResult]):
     """A collection of ValidationResults with export capabilities."""
     
     def to_polars(self) -> pl.DataFrame:
-        """Converts the list of results into a Polars DataFrame."""
         if not self.data:
             return pl.DataFrame()
-        dicts = [asdict(r) for r in self.data]
+        dicts = []
+        for r in self.data:
+            d = asdict(r)
+            if isinstance(d.get('detail'), (list, dict)):
+                d['detail'] = str(d['detail'])
+            dicts.append(d)
         return pl.DataFrame(dicts)
 
     def summary(self):
@@ -84,8 +89,8 @@ class ValidationReport(UserList[ValidationResult]):
             fixable=pl.col('need_fixing').sum(),
             total = pl.len(),
             fixed=pl.col("fixed").sum(),
-            problem_code=pl.col('code').filter(pl.col('need_fixing') == True).unique(),
-            affected=pl.col('key').filter(pl.col('need_fixing') == True).unique()
+            problem_code=pl.col('code').filter(pl.col('need_fixing')).unique(),
+            affected=pl.col('key').filter(pl.col('need_fixing')).unique()
         )
     
     def __repr__(self):
@@ -123,7 +128,7 @@ class AntennaNameMappingValidator(IdiValidatorBase):
         def result(**kwargs):return ValidationResult(code=self.code,hdu=hdu_name, **kwargs)        
         if hdu_name not in hdul.names:return result(msg='hdu not present', key=key, need_fixing=False)
         if key not in self.anidcols:return result(msg='skipped', key=key, need_fixing=False)
-        affected_data,corrected_data,bad_data =   [],[],[]
+        affected_data =   []
         
         missing_ants_location, affected_data = self.check_missing_ant(hdul, hdu_name, key)
         
@@ -211,7 +216,7 @@ class DuplicateValueValidator(IdiValidatorBase):
     duplicate_hdu = {'SOURCE': {'SOURCE':['SOURCE_ID', 'ID_NO.', 'ID_NO'], },
                      }
     
-    def choose_correct_id_forduplicate_fields(self, hdu, verbose=False, size_chunk=50_000):
+    def choose_correct_id_forduplicate_fields(self, hdu, verbose=False, scanlist=[], size_chunk=50_000):
         list_chosen_ids, list_dupl_ids, list_rejected_ids = [], [], []
         fop                      =   FITSIDI(hdu.filename)
         
@@ -260,7 +265,10 @@ class DuplicateValueValidator(IdiValidatorBase):
 
             
             if len(list_dupl_ids):
-                source_id_uvdata = get_source_id_in_uvd(fop, total_rows, size_chunk)
+                if not len(scanlist):
+                    source_id_uvdata = get_source_id_in_uvd(fop, total_rows, size_chunk)
+                else:
+                    source_id_uvdata = list(set(scanlist))
                 
                 for dupl_id in list_dupl_ids:
                     if dupl_id in source_id_uvdata:
@@ -282,7 +290,7 @@ class DuplicateValueValidator(IdiValidatorBase):
             for possible_colname, possible_idcolname in dict_colname.items():
                 shdu, shduids           = _gethduname(hdul, [hdu_name_check])
                 if not shdu:
-                    warnings.warn((f"SOURCE table not found."), UserWarning, stacklevel=2)
+                    warnings.warn(("SOURCE table not found."), UserWarning, stacklevel=2)
                 source_data             =   hdul[shdu]
                 source_col              = _getcolname(source_data,[possible_colname])
                 id_col                  = _getcolname(source_data,possible_idcolname)
@@ -293,9 +301,8 @@ class DuplicateValueValidator(IdiValidatorBase):
 
         return result(msg=f"{self.desc()}", need_fixing=len(duplicates)>0, detail=[id_col], bad_data=duplicates, key=",".join(duplicates))
     
-    def fix(self, hdu_name: str, key: str, hdul, result: ValidationResult) -> bool:
-        col_name = key      # TODO: complete me ; take help from AntennaMapping..
-        chosen_id, rm_ids = self.choose_correct_id_forduplicate_fields(hdul, verbose=True, size_chunk=50_000)
+    def fix(self, hdu_name: str, key: str, hdul, result: ValidationResult, scanlist=[]) -> bool:
+        chosen_id, rm_ids = self.choose_correct_id_forduplicate_fields(hdul, verbose=True, size_chunk=50_000, scanlist=scanlist)
         id_col = result.detail[0]
         rm_rows = np.isin(np.array(hdul[hdu_name][id_col])[:], rm_ids)
         
@@ -369,7 +376,6 @@ class ExtraByteValidator(IdiValidatorBase):
         return result(msg='', need_fixing=False)
     
     def fix(self, hdu_name: str, key: str, hdul, result: ValidationResult) -> bool:
-        col_name = key
         subprocess.run(['truncate', '-s', str(hdul.extra_byte_location), hdul.filename])
         result.fixed = True
         return result.fixed
@@ -411,14 +417,14 @@ class HeaderPrimaryValidator(IdiValidatorBase):
     scope = "header"
     run_once = True
     
-    mandatory_header = {'NAXIS':0, 'EXTEND':'T'}
+    mandatory_header = {'NAXIS':0, 'EXTEND':True}
     def check(self, hdu_name: str, key: str, hdul) -> ValidationResult:  
         def result(**kwargs):return ValidationResult(code=self.code,hdu=hdu_name, **kwargs)
         if hdu_name not in ['PRIMARY']:return result(msg='header not present', key=key, need_fixing=False)
         
         affected_keys, bad_data, corrected_data = [], [],[]
         for key, v in self.mandatory_header.items():
-            if not key in hdul[hdu_name].header:
+            if key not in hdul[hdu_name].header:
                 affected_keys.append(key)
                 bad_data.append('')
                 corrected_data.append({key:v})
@@ -449,25 +455,25 @@ class LeadingZerosValidator(IdiValidatorBase):
         def result(**kwargs):return ValidationResult(code=self.code,hdu=hdu_name, **kwargs)        
         if hdu_name not in self.hdu_names:return result(msg='skipped', key=key, need_fixing=False)
         
-        affected_data,corrected_data,bad_data =   [],[],[]
+        affected_data,corrected_data,bad_data =   [],{},[]
         for i,src in enumerate(hdul[hdu_name]['SOURCE']):
             if str(src)[0] == '0':
-                intsrc, isint = '', False
+                isint = False
                 try:
-                    intsrc = int(src)
+                    _ = int(src)
                     isint = True
-                except:
+                except Exception:
                     isint = False
                 if isint:
                     affected_data.append(src)
                     bad_data.append(src)
-                    corrected_data.append(i,[('O' * (len(src) - len(src.lstrip('0'))) + src.lstrip('0')) if src.lstrip('0').isdigit() else src])
-        return result(msg=f"{self.desc()}", need_fixing=len(corrected_data)>0, detail=corrected_data, bad_data=bad_data, key=",".join(affected_data))
+                    corrected_data[i]=[('O' * (len(src) - len(src.lstrip('0'))) + src.lstrip('0')) if src.lstrip('0').isdigit() else src][0]
+        return result(msg=f"{self.desc()}", need_fixing=len(bad_data)>0, detail=corrected_data, bad_data=bad_data, key=",".join(affected_data))
     
     def fix(self, hdu_name: str, key: str, hdul, result: ValidationResult) -> bool:
-        
-        for i, (idx, corrected_data) in enumerate(result.detail):
-            hdul[hdu_name]['SOURCE'][idx] = corrected_data
+        print(result.detail)
+        for idx, corrected_data in result.detail.items():
+            hdul[hdu_name].update_cell('SOURCE', idx, corrected_data)
         hdul[hdu_name].update()
         result.fixed = True
         return result.fixed
@@ -479,8 +485,9 @@ class MultipleFrequencyIdValidator(IdiValidatorBase):
     
     def check(self, hdu_name: str, key: str, hdul) -> ValidationResult:  
         def result(**kwargs):return ValidationResult(code=self.code,hdu=hdu_name, **kwargs)        
-        affected_hdus =   []
-        if not 'FREQID' in hdul[hdu_name]: return result(msg='skipped', key='FREQID', need_fixing=False)
+        
+        if hdu_name not in hdul:return result(msg='skipped', key=key, need_fixing=False)
+        if 'FREQID' not in hdul[hdu_name]: return result(msg='missing', key='FREQID', need_fixing=True)
         if all(np.array(hdul[hdu_name]['FREQID'])==1): return result(msg='skipped', key='FREQID', need_fixing=False)
         
         return result(msg=f"{self.desc()}", need_fixing=True, detail=hdul[hdu_name]['FREQID'], bad_data=hdul[hdu_name]['FREQID'], key='FREQID')
@@ -548,15 +555,20 @@ class FITSIDIValidator:
             ]:
             self._issues.append(issue)
         return self._issues
+    
+    def filter_codes(self, *keys):
+        if len(keys):
+            self.validators = {k: v for k, v in self._validators.items() if k in keys}
+        return self
 
-    def register_checker(self, checker: IdiValidatorBase):
-        """Add or override a checker at runtime."""
-        self._validators[checker.code] = checker
+    def register_validator(self, validator: IdiValidatorBase):
+        """Add or override a validator at runtime."""
+        self._validators[validator.code] = validator
     
     def register_issues(self, issue: IssueIdiHDU):
         self._issues.append(issue) 
         
-    def run(self, fix: bool = False) -> ValidationReport[ValidationResult]:
+    def run(self, fix: bool = False, **params) -> ValidationReport[ValidationResult]:
         all_result = ValidationReport()
         fo = FITSIDI(self.fitsfilepath)
         
@@ -565,25 +577,30 @@ class FITSIDIValidator:
             
             ran_once = set()
             for hdu_name, columns in self._issues:
-                for code, checker in self._validators.items():
-                    if checker.run_once and code in ran_once:
+                for code, validator in self.validators.items():
+                    sig = inspect.signature(validator.fix)
+                    
+                    validator_arg = set(sig.parameters.keys())
+                    filtered_kwargs = {k: v for k, v in params.items() if k in validator_arg}
+
+                    if validator.run_once and code in ran_once:
                         continue 
-                    if (checker.scope == "header") or (checker.scope == "data"):
+                    if (validator.scope == "header") or (validator.scope == "data"):
                         
-                        results = checker.check(hdu_name, '', hdul)
+                        results = validator.check(hdu_name, '', hdul)
                         all_result.append(results)
                         if results.need_fixing and fix:
-                            checker.fix(hdu_name, '', hdul, results)
+                            validator.fix(hdu_name, '', hdul, results, **filtered_kwargs)
                             fo.flush()
                     else:
                         for column in columns:
-                            if not column in ran_once:
-                                results = checker.check(hdu_name, column, hdul)
+                            if column not in ran_once:
+                                results = validator.check(hdu_name, column, hdul)
                                 all_result.append(results)
                                 if results.need_fixing and fix:
-                                    checker.fix(hdu_name, column, hdul, results)
+                                    validator.fix(hdu_name, column, hdul, results)
                                     fo.flush()
-                    if checker.run_once:
+                    if validator.run_once:
                         ran_once.add(code)
                             
         return all_result
@@ -606,6 +623,6 @@ class FITSIDIValidator:
     def __repr__(self):
         return str(self.validators_to_polars())
 
-    
 
-fitsidi_check = FITSIDIValidator
+def fitsidi_check(fitsfilepath, **kwargs):
+    return FITSIDIValidator(fitsfilepath=fitsfilepath, **kwargs)

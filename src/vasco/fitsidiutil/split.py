@@ -1,19 +1,25 @@
-from astropy.io import fits
-from typing import List, Any
+from typing import List
 import numpy as np
-from vasco.fits import _gethduname
-from fitsio import FITS
+from .core import split as fio_split
+from .op import dict_baseline, get_hduname
+from .io import FITSIDI, read_idi
 
 
 class SplitData:
-    def __init__(self, inpfits, outfits):
+    def __init__(self, inpfits:str, outfits:str, verbose:bool=False):
         self.inpfits    =   inpfits
         self.outfits    =   outfits
         self.hduname    =   "UV_DATA"
-        self.hdu_i      =   fits.open(inpfits)
-        self.hdu_o      =   fits.open(outfits, mode='update')
+        self.hdu_i      =   read_idi(inpfits)
+        self.fo_out         =   FITSIDI(fitsfile=self.outfits)
+        self.verbose    =   verbose
+    
+    def _open_forupdate(self):
+        self.fo_out.open(mode="w")
+        return self.fo_out.read()
         
-    def mandatory_headers(self):                                    # TODO: enable .yaml input for the mandatory headers
+    
+    def mandatory_headers(self):                                    # TODO: 1. move to `.io``  2. enable .yaml input for the mandatory headers
         __header_list  = ['EXTNAME', 'TABREV', 'NMATRIX', 'MAXIS', 
                           'MAXISm', 'CTYPEm', 'CDELTm', 'CRPIXm', 'CRVALm', 'TMATXn',
                           'NO_STKD', 'STK_1', 'NO_BAND', 'NO_CHAN', 'REF_FREQ', 'CHAN_BW']
@@ -38,52 +44,86 @@ class SplitData:
                     hdr_found.add(headerkey)
         return mh, hdr_found
     
+    def split(self, source_ids:List=None, baseline_ids:List=None, freqids:List=None, expr:str=""):
+        
+        
+        source_ids = [int(s) for s in source_ids] if source_ids else None
+        freqids = [int(s) for s in freqids] if freqids else None
+        
+        if baseline_ids and 'auto' in baseline_ids: 
+            baseline_ids        =   [str(basl) for basl in list(dict_baseline(fitsfile=self.inpfits).keys())]
+            baseline_ids        =   ",".join(baseline_ids)
+            
+        baseline_ids = baseline_ids.split(',') if baseline_ids else None
+        baseline_ids = [int(bl) for bl in baseline_ids] if baseline_ids else None
+        
+        
+        fio_split(fitsfilepath=self.inpfits, 
+                        outfitsfilepath=self.outfits, 
+                        sids=source_ids, baseline_ids=baseline_ids, freqids=freqids,
+                        source_col="SOURCE", baseline_col="BASELINE", frequency_col="FREQID", 
+                        expression=expr, verbose=False)
+        if self.verbose : print("splitted successfully!")
+        self.hdu_o      =   self._open_forupdate()
+        self.update_header()
+    
     def update_header(self):
         mh, hdrs_found = self.check_headers()
-        if len(mh)>len(hdrs_found):                                 # TODO: check strongly for the mandatory headers
-            print("Warning! Not all mandatory headers were found.")
+        # if len(mh)>len(hdrs_found):                                 # TODO: check strongly for the mandatory headers
+        #     print(f"Warning! Not all mandatory headers were found : {set(mh).difference(set(hdrs_found))}")
         
-        _, tbidxs   = _gethduname(self.hdu_i, [self.hduname])
+        _, tbidxs   = get_hduname(self.hdu_i, [self.hduname])
         
-        fits_inp = FITS(self.inpfits)
-        for hdu in fits_inp:
-            if hdu.get_extname() == self.hduname:
-                tb          =   hdu.get_extnum()
-                header_inp  =   hdu.read_header()
-
-                with FITS(self.outfits, mode='rw') as fnew:
-                    for key in header_inp.keys():
-                        if not key in ['NAXIS2']:
-                            fnew[tb].write_key(key, header_inp[key])
+        hdul_inp    =   read_idi(self.inpfits)
+        hdul_out_readonly    =   read_idi(self.outfits)
+        fo          =   FITSIDI(self.outfits)
+        
+        with fo.open("w") as fop:
+            hdul_out = fop.read()
+            for tbidx in tbidxs:
+                tbinp_uv_data      =   hdul_inp[tbidx]
+                header_inp          =   tbinp_uv_data.header
+                header_outp_existing = hdul_out_readonly[tbidx].header
+                prev_key            =   None
+                
+                for pos, key in enumerate(header_inp.keys()):
+                    if key not in header_outp_existing:
                         
+                        dtype = header_inp.get_dtype(key)
+                        value = header_inp[key]
+                        
+                        if prev_key is None:
+                            hdul_out[tbidx].add_key(key, value, position=pos, dtype=dtype)
+                        else:
+                            hdul_out[tbidx].add_key(key, value, after=prev_key, dtype=dtype)
+                    elif key not in ['NAXIS2']:
+                        hdul_out[tbidx].update_key(key, header_inp[key])
                     
-        # for tb in tbidxs:
-        #     print(f"....processing header {tb}")
-            
-        #     naxis2                          = self.hdu_o[tb].header['NAXIS2']
-        #     self.hdu_o[tb].header           = self.hdu_i[tb].header.copy()
-            
-        #     self.hdu_o[tb].header['NAXIS2'] = naxis2
-        #     self.hdu_o.flush()
-        #     print(f"MAXIS1, inp=>{self.hdu_i[tb].header['MAXIS1']}, oup=> {self.hdu_o[tb].header['MAXIS1']}")
+                    prev_key = key
+                    
+                        
+                hdul_out[tbidx].update()
+            fo.flush()
     
     def reindex(self, sel_freqids):
         if sel_freqids:
-            reindex_freqid(hdul=self.hdu_o, sel_freqids=sel_freqids)
+            reindex_freqid(fitsfilepath=self.outfits, sel_freqids=sel_freqids)
             
     def rm_tbl(self, tbl_names):
-        for tbl_name in tbl_names:
-            del self.hdu_o[tbl_name]
+        _, _idxs = get_hduname(self.hdu_o, tbl_names)
+        for tbidx in _idxs:
+            del self.hdu_o[tbidx]
+            self.hdu_o[tbidx].update()
+        self.fo_out.flush()
             
     
-def reindex_freqid(fitsfile : str = None, hdul: fits.HDUList = None, sel_freqids : List = []):
+def reindex_freqid(fitsfilepath, sel_freqids : List = []):
     """Uses sel_freqids to filter FREQID in FREQUENCY binary table and from the filtered values create a reindexed FREQID from 1,..N
         Similarly filters values in UV_DATA and fixes FREQID=1 on all that found
         Note: Dont use multiple sel_freqids, currently not supported
 
     Args:
-        fitsfile (str, optional): path of the fitsfile. Defaults to None.
-        hdul (fits.HDUList, optional): fits HDUL. Defaults to None.
+        fitsfilepath
         sel_freqids (List, optional): selected FREQID values in list. Defaults to [].
 
     Raises:
@@ -93,48 +133,48 @@ def reindex_freqid(fitsfile : str = None, hdul: fits.HDUList = None, sel_freqids
     Returns:
         fits.HDUList: will be closed if the fitsfile path is provided, else will return a flushed HDUL.
     """
-    
-    if hdul is None:
-        if fitsfile is None: raise ValueError("missing fits file path")
-        else: hdul=fits.open(fitsfile, mode="update")
+    fo          =   FITSIDI(fitsfilepath)
         
-    
-    for tb_name in ["FREQUENCY", "GAIN_CURVE", "SYSTEM_TEMPERATURE"]:   
-        if tb_name in hdul: 
-            tbld               =   hdul[tb_name].data.copy()
-            tbld               =   tbld[np.isin(tbld['FREQID'], sel_freqids)]
-            
-            # reindexed_id        =   [newid+1 for newid,_ in enumerate(np.unique(tbld['FREQID']))]
-            tbld['FREQID']      =   1
-            
-            if len(np.unique(tbld['FREQID']))==1:
-                hdul[tb_name].data                  =   tbld
-                hdul[tb_name].header['NAXIS2']      =   hdul[tb_name].data['FREQID'].shape[0]
-            else:
-                if len(np.unique(tbld['FREQID']))>1:
-                    raise ValueError(f"Aborting reindex.. only single FREQID is supported! found : {tbld['FREQID']} ({tb_name})")
-                else:
-                    if all(np.isin(hdul[tb_name].data['FREQID'], [1])):
-                        print(f"Skipped reindexing and keeping the original values for {tb_name}")
-                    else:
-                        raise RuntimeWarning(f"Skipped reindex.. chosen FREQID ({sel_freqids}) not found! ({tb_name})")
+    with fo.open("w") as fop:
+        hdul = fop.read()
+        for tb_name in ["FREQUENCY", "GAIN_CURVE", "SYSTEM_TEMPERATURE"]:   
+            if tb_name in hdul.names: 
+                tbld               =   np.array(hdul[tb_name])
+                tbld               =   tbld[np.isin(tbld['FREQID'], sel_freqids)]
                 
-                    
-    _, tbidxs   = _gethduname(hdul, ['UV_DATA'])
-
+                # reindexed_id        =   [newid+1 for newid,_ in enumerate(np.unique(tbld['FREQID']))]
+                tbld['FREQID']      =   1
+                
+                if len(np.unique(tbld['FREQID']))==1:
+                    hdul[tb_name]                  =   tbld
+                    naxis2                         =   np.shape(hdul[tb_name]['FREQID'])[0]
+                    hdul[tb_name].update_key('NAXIS2', naxis2)
+                else:
+                    if len(np.unique(tbld['FREQID']))>1:
+                        raise ValueError(f"Aborting reindex.. only single FREQID is supported! found : {tbld['FREQID']} ({tb_name})")
+                    else:
+                        if all(np.isin(hdul[tb_name]['FREQID'], [1])):
+                            print(f"Skipped reindexing and keeping the original values for {tb_name}")
+                        else:
+                            raise RuntimeWarning(f"Skipped reindex.. chosen FREQID ({sel_freqids}) not found! ({tb_name})")
+            hdul[tb_name].update()
+        fop.flush()
+    
+    
+    hdul        = read_idi(fitsfile=fitsfilepath)
+    fo          = FITSIDI(fitsfilepath)
+    _, tbidxs   = get_hduname(hdul, ['UV_DATA'])
     for tb in tbidxs:
+        with fo.open("w") as fop:
+            for hdu_chunk in fop.iter_read(fop.read().nrows):
+                hdulmask = np.isin(np.array(hdu_chunk[tb]['FREQID']), sel_freqids)
+                
+                hdu_chunk[tb].filter_inplace(hdulmask)
+                hdu_chunk[tb]['FREQID'] = 1
+                hdu_chunk[tb].update_key('NAXIS2', sum(hdulmask))
+                hdu_chunk[tb].update()
         
-        hdulmask                     =   np.isin(hdul[tb].data['FREQID'], sel_freqids)
-        hdul[tb].data                =   hdul[tb].data[hdulmask]
-        hdul[tb].data['FREQID']      =   1
-        hdul[tb].header['NAXIS2']    =   sum(hdulmask)
-
-        
+            fop.flush()
     
-    
-    hdul.flush()
-    
-    if fitsfile is not None:
-        hdul.close()
         
     return hdul

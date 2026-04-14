@@ -46,6 +46,32 @@ PYBIND11_MODULE (_core, m){
         .def("update_header_double", &ReadIO::update_header_double, 
             py::arg("hdu_num"), py::arg("key"), py::arg("value"), py::arg("comment"),
                 "update key, value in header where value is double")
+        .def("insert_header_after", &ReadIO::insert_header_after, 
+            py::arg("hdu_num"), py::arg("after_key"), py::arg("key"), 
+            py::arg("value"), py::arg("comment"), py::arg("dtype"),
+            "Insert header keyword after another keyword with specified dtype")
+        .def("insert_header", &ReadIO::insert_header, 
+            py::arg("hdu_num"), py::arg("position"), py::arg("key"), 
+            py::arg("value"), py::arg("comment"), py::arg("dtype"),
+            "Insert header keyword at position with specified dtype")
+        .def("insert_header_str_after", &ReadIO::insert_header_str_after, 
+            py::arg("hdu_num"), py::arg("after_key"), py::arg("key"), py::arg("value"), py::arg("comment"),
+            "insert key, value in header where value is str")
+        .def("insert_header_int_after", &ReadIO::insert_header_int_after, 
+            py::arg("hdu_num"), py::arg("after_key"), py::arg("key"), py::arg("value"), py::arg("comment"),
+            "insert key, value in header where value is int")
+        .def("insert_header_double_after", &ReadIO::insert_header_double_after, 
+            py::arg("hdu_num"), py::arg("after_key"), py::arg("key"), py::arg("value"), py::arg("comment"),
+            "insert key, value in header where value is double")
+        .def("insert_header_str", &ReadIO::insert_header_str, 
+            py::arg("hdu_num"), py::arg("position"), py::arg("key"), py::arg("value"), py::arg("comment"),
+            "insert key, value in header where value is str")
+        .def("insert_header_int", &ReadIO::insert_header_int, 
+            py::arg("hdu_num"), py::arg("position"), py::arg("key"), py::arg("value"), py::arg("comment"),
+            "insert key, value in header where value is int")
+        .def("insert_header_double", &ReadIO::insert_header_double, 
+            py::arg("hdu_num"), py::arg("position"), py::arg("key"), py::arg("value"), py::arg("comment"),
+            "insert key, value in header where value is double")
         .def("save_as", &ReadIO::save_as,
             py::arg("outfitsfilepath"),
             py::arg("uv_data_dict_by_hdu") = py::none(),
