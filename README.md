@@ -6,6 +6,12 @@ This is a helper tool for CASA based optimizations to use rPICARD and CASA for V
 
 > UNDER DEVELOPMENT : Version 0.3.0 releasing soon.
 
+# Installation
+
+```
+git clone --recurse-submodules https://github.com/avikhagol/vasco.git
+```
+
 # Usage
 
 ```

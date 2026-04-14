@@ -1,0 +1,6 @@
+fitsidifile      = ['reduction/BV019/wd/raw/vlba_VSN001024_file33.uvfits']
+vis              = 'reduction/BV019/wd/VLBI.ms'
+constobsid       = True
+scanreindexgap_s = 15
+specframe        = 'GEO'
+#importfitsidi( fitsidifile=['reduction/BV019/wd/raw/vlba_VSN001024_file33.uvfits'],vis='reduction/BV019/wd/VLBI.ms',constobsid=True,scanreindexgap_s=15,specframe='GEO' )
