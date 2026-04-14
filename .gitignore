@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 src/vasco/fits/
 src/vasco/fitsio/
+src/vasco/idifits/
