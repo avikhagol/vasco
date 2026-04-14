@@ -1,71 +1,18 @@
 API
 ================
 
-fitsidiutil
-===================
+This section covers the internal modules of the VASCO pipeline.
 
-vasco.fitsidiutil.obs
----------------------
-.. automodule:: vasco.fitsidiutil.obs
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. toctree::
+   :maxdepth: 2
+   :caption: Modules:
 
-vasco.fitsidiutil.split
----------------------
-
-.. index:: vasco.fitsidiutil.split
-
-.. automodule:: vasco.fitsidiutil.split
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   api/fitsidiutil
+   api/ms
+   api/plotting
 
 
-Measurement Set
-===================
 
-vasco.ms
----------------------
-
-.. automodule:: vasco.ms
-   :members:
-   :no-undoc-members:
-   :show-inheritance:
-
-Plotting
-===================
-
-vasco.diag 
-----------------------
-
-.. automodule:: vasco.diag
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Sources
-===================
-
-vasco.sources
----------------------------
-
-.. automodule:: vasco.sources
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-
-Fringe Fit
-===================
-
-vasco.ms.fringefit 
-------------------------
-
-.. automodule:: vasco.ms.fringefit
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
 
 Indices and tables
