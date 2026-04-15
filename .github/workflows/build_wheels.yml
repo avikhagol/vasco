@@ -29,11 +29,11 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BEFORE_ALL_LINUX: >
             yum install -y openssl-devel keyutils-libs-devel libffi-devel
+
           CIBW_ENVIRONMENT: >
             CMAKE_POLICY_VERSION_MINIMUM=3.5
-            CC=/opt/rh/devtoolset-9/root/usr/bin/gcc
-            CXX=/opt/rh/devtoolset-9/root/usr/bin/g++
-
+            CC="scl enable devtoolset-9 gcc"
+            CXX="scl enable devtoolset-9 g++"
           # macOS
           CIBW_BEFORE_ALL_MACOS: >
             brew install cfitsio openssl libffi
