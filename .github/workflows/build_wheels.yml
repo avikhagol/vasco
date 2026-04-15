@@ -2,6 +2,9 @@ name: Build and publish wheels
 
 on:
   push:
+    branches:
+      - main
+      - master
     tags:
       - "v*"
 
