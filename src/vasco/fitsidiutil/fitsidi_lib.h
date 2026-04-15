@@ -2,7 +2,6 @@
 #define FITSIDI_LIB
 
 #include <string>
-#include <optional>
 #include <set>
 #include <iostream>
 #include <vector>
@@ -26,25 +25,24 @@ class SplitSources {
         }
         
         static int split(
-                const std::string& fitsfilepath, const std::string& outfitsfilepath, 
-                const std::optional<std::vector<long int>>& sids,
-                const std::optional<std::vector<long int>>& baseline_ids,
-                const std::optional<std::vector<long int>>& freqids,
-                const std::string& source_col = "SOURCE",
-                const std::string& baseline_col = "BASELINE",
-                const std::string& frequency_col = "FREQID",
-                const std::string& expression = "",
-                const bool reindex = false,
-                const bool verbose = true
-
-            ) 
+                        const std::string& fitsfilepath, const std::string& outfitsfilepath,
+                        const std::vector<long int>* sids = nullptr,
+                        const std::vector<long int>* baseline_ids = nullptr,
+                        const std::vector<long int>* freqids = nullptr,
+                        const std::string& source_col = "SOURCE",
+                        const std::string& baseline_col = "BASELINE",
+                        const std::string& frequency_col = "FREQID",
+                        const std::string& expression = "",
+                        const bool reindex = false,
+                        const bool verbose = true
+                    )
                 {
 
                     const char *input_fits_filename = fitsfilepath.c_str();
                     const char *output_fits_filename = outfitsfilepath.c_str();
-                    std::vector<long int> sids_vec = sids.value_or(std::vector<long int>{});
-                    std::vector<long int> baseline_ids_vec = baseline_ids.value_or(std::vector<long int>{});
-                    std::vector<long int> freqids_vec = freqids.value_or(std::vector<long int>{});
+                    std::vector<long int> sids_vec         = sids         ? *sids         : std::vector<long int>{};
+                    std::vector<long int> baseline_ids_vec = baseline_ids ? *baseline_ids : std::vector<long int>{};
+                    std::vector<long int> freqids_vec      = freqids      ? *freqids      : std::vector<long int>{};
                 
                     fitsfile *in_fptr, *out_fptr;
                     int status = 0, colnum_source, colnum_baseline, anynul;

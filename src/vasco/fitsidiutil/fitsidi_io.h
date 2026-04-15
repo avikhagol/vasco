@@ -9,7 +9,6 @@
 #include <set>
 #include <cstring>
 #include <string>
-#include <optional>
 #include <cstdio>
 
 #include <pybind11/pybind11.h>
@@ -864,16 +863,20 @@ class ReadIO {
         
         return table_data;
     }
-        std::vector<RowData> listobs_fits(
-            const std::optional<std::vector<long int>>& sids = std::nullopt
-        ) 
+        std::vector<RowData> listobs_fits(py::object sids_arg = py::none())
             {
-            std::vector<long int> sids_vec = sids.value_or(std::vector<long int>{});
+            std::vector<long int> sids_vec;
+            bool filter_by_sids = false;
+
+            if (!sids_arg.is_none()) {
+                sids_vec = sids_arg.cast<std::vector<long int>>();
+                filter_by_sids = !sids_vec.empty();
+            }
+            
             int num_hdus;
             int status = 0;
             std::map<int, long> freqidToBandfreq;
 
-            bool filter_by_sids = !sids_vec.empty();                                                        //
             std::vector<RowData> results;
             std::set<long int> sids_set(sids_vec.begin(), sids_vec.end());
             if (!fptr) return results;

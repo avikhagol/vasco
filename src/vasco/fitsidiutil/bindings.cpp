@@ -99,33 +99,36 @@ PYBIND11_MODULE (_core, m){
 
 
     m.def("split", [](
-        const std::string& fitsfilepath, const std::string& outfitsfilepath, 
-        const std::optional <std::vector<long int>>& sids, 
-        const std::optional <std::vector<long int>>& baseline_ids,
-        const std::optional<std::vector<long int>>& freqids,
-        const std::string& source_col,
-        const std::string& baseline_col,
-        const std::string& frequency_col,
-        const std::string& expression,
-        const bool reindex,
-        const bool verbose = true
-        ) {
-            std::vector<long int> sids_vec = sids.value_or(std::vector<long int>{});
-            std::vector<long int> baseline_ids_vec = baseline_ids.value_or(std::vector<long int>{});
-            std::vector<long int> freqids_vec = freqids.value_or(std::vector<long int>{});
-            
-            return SplitSources::split(fitsfilepath, outfitsfilepath, sids_vec, baseline_ids_vec, freqids_vec,
-                source_col, baseline_col, frequency_col, expression, reindex, verbose
-        );
-        }, 
-        py::arg("fitsfilepath"), py::arg("outfitsfilepath"),
-        py::arg("sids") = py::none(), py::arg("baseline_ids") = py::none(), py::arg("freqids") = py::none(),
-        py::arg("source_col") = "SOURCE", py::arg("baseline_col") = "BASELINE", 
-        py::arg("frequency_col") = "FREQID",
-        py::arg("expression") = "", 
-        py::arg("reindex") = false,
-        py::arg("verbose") = true,
-        "Split a FITS file based on source and baseline IDs.");
+    const std::string& fitsfilepath, const std::string& outfitsfilepath, 
+    py::object sids,
+    py::object baseline_ids,
+    py::object freqids,
+    const std::string& source_col,
+    const std::string& baseline_col,
+    const std::string& frequency_col,
+    const std::string& expression,
+    const bool reindex,
+    const bool verbose
+    ) {
+        std::vector<long int> sids_vec         = sids.is_none()         ? std::vector<long int>{} : sids.cast<std::vector<long int>>();
+        std::vector<long int> baseline_ids_vec = baseline_ids.is_none() ? std::vector<long int>{} : baseline_ids.cast<std::vector<long int>>();
+        std::vector<long int> freqids_vec      = freqids.is_none()      ? std::vector<long int>{} : freqids.cast<std::vector<long int>>();
+        
+        return SplitSources::split(fitsfilepath, outfitsfilepath, &sids_vec, &baseline_ids_vec, &freqids_vec,
+            source_col, baseline_col, frequency_col, expression, reindex, verbose);
+    },
+    py::arg("fitsfilepath"),
+    py::arg("outfitsfilepath"),
+    py::arg("sids")         = py::none(),
+    py::arg("baseline_ids") = py::none(),
+    py::arg("freqids")      = py::none(),
+    py::arg("source_col")   = "SOURCE",
+    py::arg("baseline_col") = "BASELINE",
+    py::arg("frequency_col")= "FREQID",
+    py::arg("expression")   = "",
+    py::arg("reindex")      = false,
+    py::arg("verbose")      = true
+);
 
     m.def("repair_hdu_key", &repair_hdu_key, 
           "Repair or insert a key. If shift=True, it inserts and pushes data down. "

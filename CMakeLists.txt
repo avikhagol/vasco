@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.18...3.30)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "" FORCE)
+
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+
 project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX VERSION ${SKBUILD_PROJECT_VERSION})
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
@@ -8,7 +12,7 @@ option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 set_property(GLOBAL PROPERTY JOB_POOLS one_jobs=4 two_jobs=8)
 
 # Check available physical memory
-cmake_host_system_information(RESULT _memfree QUERY AVAILABLE_PHYSICAL_MEMORY)
+# cmake_host_system_information(RESULT _memfree QUERY AVAILABLE_PHYSICAL_MEMORY)
 
 # set(PYBIND11_NEWPYTHON ON)
 include(FetchContent)
@@ -59,25 +63,24 @@ set_target_properties(${FITSIDIUTIL_MODULE} PROPERTIES
 )
 
 # Set job pool for the module if memory is low
-if(_memfree LESS 4096)
-    set_property(TARGET ${FITSIDIUTIL_MODULE} PROPERTY JOB_POOL_COMPILE one_jobs)
-endif()
+# if(_memfree LESS 4096)
+#     set_property(TARGET ${FITSIDIUTIL_MODULE} PROPERTY JOB_POOL_COMPILE one_jobs)
+# endif()
 
 # set(CMAKE_BUILD_RPATH ${ORIGIN})
 message(STATUS "CFITSIO target exists: ${CFITSIO_LIBRARIES} ${cfitsio_SOURCE_DIR} ${cfitsio_DIR} ${cfitsio_BUILD} ${ORGIN}")
 if(NOT TARGET cfitsio::cfitsio)
     message(FATAL_ERROR "cfitsio::cfitsio is not a TARGET")
 endif()
+# set_target_properties(${FITSIDIUTIL_MODULE} PROPERTIES INSTALL_RPATH "\$ORIGIN:\$ORIGIN/../lib/:\$ORIGIN/../lib64/")
 
-set_target_properties(${FITSIDIUTIL_MODULE} PROPERTIES INSTALL_RPATH "\$ORIGIN:\$ORIGIN/../lib/:\$ORIGIN/../lib64/")
-
-if(APPLE)
-    set_target_properties(${FITSIDIUTIL_MODULE} PROPERTIES
-        INSTALL_RPATH "@loader_path")
-else()
-    set_target_properties(${FITSIDIUTIL_MODULE} PROPERTIES
-        INSTALL_RPATH "$ORIGIN")
-endif()
+# if(APPLE)
+#     set_target_properties(${FITSIDIUTIL_MODULE} PROPERTIES
+#         INSTALL_RPATH "@loader_path")
+# else()
+#     set_target_properties(${FITSIDIUTIL_MODULE} PROPERTIES
+#         INSTALL_RPATH "$ORIGIN")
+# endif()
 
 target_link_libraries(${FITSIDIUTIL_MODULE} PRIVATE cfitsio Python3::Module)
 target_include_directories(${FITSIDIUTIL_MODULE} PRIVATE ${cfitsio_SOURCE_DIR} ${cfitsio_SOURCE_DIR}/include)
