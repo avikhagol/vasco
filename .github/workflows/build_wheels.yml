@@ -22,11 +22,11 @@ jobs:
         env:
           CIBW_BUILD: cp310-* cp311-* cp312-*
           CIBW_ARCHS_LINUX: x86_64
-          CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux2014_x86_64:latest
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_ENVIRONMENT: CMAKE_POLICY_VERSION_MINIMUM=3.5
           CIBW_BUILD_VERBOSITY: 1
           CIBW_TEST_SKIP: "*"
-
+          
       - uses: actions/upload-artifact@v5
         with:
           name: wheels-${{ matrix.os }}
