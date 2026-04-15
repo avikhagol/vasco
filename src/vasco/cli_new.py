@@ -79,7 +79,7 @@ def listobs(fitsfilenames: Annotated[Optional[List[str]], typer.Argument()] = No
 
 
 fitsidicheck_app = typer.Typer(help="validate and fix, known FITS-IDI problems")
-vasco_cli.add_typer(fitsidicheck_app, name="validate")
+vasco_cli.add_typer(fitsidicheck_app, name="fitsidi_check")
 
 @fitsidicheck_app.callback(invoke_without_command=True)
 def fitsidicheck(fitsfilenames: Annotated[Optional[List[str]], typer.Argument()] = None,
