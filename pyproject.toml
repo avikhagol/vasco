@@ -76,5 +76,5 @@ src = ["src"]
 before-all = "uname -a"
 manylinux-x86_64-image = "manylinux_2_28"
 
-# [tool.cibuildwheel.linux]
-# repair-wheel-command = "cp {wheel} /project/debug_wheel.whl; auditwheel show {wheel}; cp {wheel} {dest_dir}"
+[tool.cibuildwheel.linux]
+repair-wheel-command = "cp {wheel} /project/debug_wheel.whl; auditwheel show {wheel}; cp {wheel} {dest_dir}"
