@@ -1,99 +1,29 @@
-name: Build and upload to PyPI
+name: Build Wheels
 
 on:
   workflow_dispatch:
-  pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
   release:
-    types:
-      - published
+    types: [published]
 
 jobs:
   build_wheels:
-    name: Build wheels for ${{ matrix.os }}
-    runs-on: ${{ matrix.runs-on }}
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        include:
-          - os: linux-intel
-            runs-on: ubuntu-latest
-          - os: linux-arm
-            runs-on: ubuntu-24.04-arm
-          # - os: windows-intel
-          #   runs-on: windows-latest
-          # - os: windows-arm
-          #   runs-on: windows-11-arm
-          - os: macos-intel
-            # macos-15-intel is the last x86_64 runner
-            runs-on: macos-15-intel
-          - os: macos-arm
-            # macos-14+ (including latest) are ARM64 runners
-            runs-on: macos-latest
-          - os: ios
-            runs-on: macos-latest
-            platform: ios
-          # - os: pyodide
-          #   runs-on: ubuntu-latest
-          #   platform: pyodide
+        os: [ubuntu-latest, macos-latest, macos-13]
 
     steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
+      - uses: actions/checkout@v4
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.4.1
         env:
-          CIBW_PLATFORM: ${{ matrix.platform || 'auto' }}
-          CIBW_ARCHS: ${{ matrix.archs || 'auto' }}
-          CIBW_BUILD: cp39-* cp310-* cp311-* cp312-*
-        # Can also be configured directly, using `with:`
-        # with:
-        #   package-dir: .
-        #   output-dir: wheelhouse
-        #   config-file: "{package}/pyproject.toml"
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-*"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          name: cibw-wheels-${{ matrix.os }}
           path: ./wheelhouse/*.whl
-
-  build_sdist:
-    name: Build source distribution
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Build sdist
-        run: pipx run build --sdist
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cibw-sdist
-          path: dist/*.tar.gz
-
-  upload_pypi:
-    needs: [build_wheels, build_sdist]
-    runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      id-token: write
-    if: github.event_name == 'release' && github.event.action == 'published'
-    # or, alternatively, upload to PyPI on every tag starting with 'v' (remove on: release above to use this)
-    # if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    steps:
-      - uses: actions/download-artifact@v5
-        with:
-          # unpacks all CIBW artifacts into dist/
-          pattern: cibw-*
-          path: dist
-          merge-multiple: true
-
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        # To test uploads to TestPyPI, uncomment the following:
-        # with:
-        #   repository-url: https://test.pypi.org/legacy/
