@@ -19,15 +19,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-      - name: Show Linux environment
-        run: |
-          uname -a
-          cat /etc/os-release || true
-          which yum || true
-          which dnf || true
-          which apk || true
-          python --version || true
-
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22.0
         env:
@@ -42,7 +33,7 @@ jobs:
             rpm -qa | sort | head -200 || true
             yum install -y openssl-devel libffi-devel keyutils-libs-devel
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: "cp {wheel} {dest_dir}"
-
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: "cp {wheel} {dest_dir}"
           CIBW_BEFORE_ALL_MACOS: >
             brew install openssl libffi
           CIBW_ARCHS_MACOS: universal2
