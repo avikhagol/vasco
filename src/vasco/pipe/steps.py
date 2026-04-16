@@ -36,8 +36,7 @@ class PreProcessFitsIdi(PipelineStepBase):
         2. check scanlist, print listobs if scanlist output file not found in metadata
         3. split sources to contain only desired sources
         4. fix remaining problems
-        5. split in frequency id
-         . attach missing tsys, gain curve table
+        5. split in frequency id and attach missing tsys, gain curve table
         6. fill optional metadata in the calibration input files
         
         _________________________________________________________
@@ -924,7 +923,7 @@ class FillInputMs(PipelineStepBase):
     """
         _______________________________________________________
         
-        - fills input folder using metadata from the s/n rating if exists.
+        - Fills input folder using metadata from the s/n rating if exists.
         
         _________________________________________________________
         
@@ -1011,9 +1010,8 @@ class FinalSplitMs(PipelineStepBase):
     """
         _______________________________________________________
         
-        - uses mstransform to split the input visibility to contain 
-        only the final selected sources.
-        - 
+        - Uses mstransform to split the input visibility to contain only the final selected sources.
+        
         
         _________________________________________________________
         
@@ -1159,8 +1157,7 @@ class Calibration(PipelineStepBase):
     """
         _______________________________________________________
         
-        - run the complete rPicard calibrtion framework.
-        - 
+        - Runs the complete rPicard calibrtion framework.        
         
         _________________________________________________________
         
