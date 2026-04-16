@@ -29,7 +29,7 @@ from scipy.spatial import distance
 from vasco import c
 # from vasco.diag import get_avg_amp_phase, pl_diag, get_labels_dbscan, calcscatter_fromlabels_df
 
-from .mpiclient import start_mpi
+from vasco.ms.mpiclient import start_mpi
 import traceback
 
 msmd=msmetadata()

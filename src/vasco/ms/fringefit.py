@@ -1,8 +1,8 @@
 from vasco import c
 from vasco.util import read_metafile, save_metafile
 
-from .mpiclient import get_mpi_client
-from .tables import an_dic, get_ant_scans, get_name_dict, get_tb_data
+from vasco.ms.mpiclient import get_mpi_client
+from vasco.ms.tables import an_dic, get_ant_scans, get_name_dict, get_tb_data
 from vasco.config import Config, CONFIG_MAPPING
 
 from casatools import table
