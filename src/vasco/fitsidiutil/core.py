@@ -3,8 +3,6 @@ from ._core import ReadIO, split, RowData, HeaderManager, HeaderCard, repair_hdu
 
 __all__ = ["split","ReadIO","__doc__", "RowData", "HeaderManager", "HeaderCard", 'repair_hdu_key']
 
-if TYPE_CHECKING:
-    from vasco.fitsidiutil import ReadIO
 
 class HeaderWrapper:
     def __init__(self, reader: "ReadIO", hdu_num: int):
