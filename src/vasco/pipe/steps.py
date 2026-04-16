@@ -341,7 +341,7 @@ class Phaseshift(PipelineStepBase):
         _______________________________________________________
         
         - works if coordinate file was provided e.g class_search_coord.ascii
-        - match sources by coordinate and phaseshift if not coordinates within 1 arcmin
+        - match sources by coordinate and phaseshift if not coordinates within 1 arcsecond
         - casa tasks is triggered with the correct python environment using `payload service`
         
         _________________________________________________________
@@ -352,7 +352,7 @@ class Phaseshift(PipelineStepBase):
     name            =   "phaseshift"
     colnames        =   ColName('phaseshift', 'Comment_phaseshift', 'timestamp_phaseshift')
     py_env          =   "casa-6.7"
-    description     =   """uses the coodinate search file result from previous step, performs phaseshift when source is off by 1 arcmin"""
+    description     =   """uses the coodinate search file result from previous step, performs phaseshift when source is off by 1 arcsecond"""
     validate_by     =   [InitVariables, RunValidation, UpdateResults, UpdateSheet]
     result          =   StepResult(name=name, detail={},
                                        success_count=0, failed_count=0, start_stamp=datetime.now())
@@ -379,7 +379,7 @@ class Phaseshift(PipelineStepBase):
         
         UNDER_DEVELOPMENT               =   True    # TODO : finish me
         if UNDER_DEVELOPMENT:
-            msg     =   f"""\nUNDER_DEVELOPMENT!! this step will generate metadata but will not actually phaseshift\n 
+            msg     =   """\nUNDER_DEVELOPMENT!! this step will generate metadata but will not actually phaseshift\n 
                   # this is because the phaseshift perl script currently works with hard-coded python environment"""
             print(msg)
             log.info(msg)
@@ -467,13 +467,13 @@ class Phaseshift(PipelineStepBase):
                                 print(" ...target is within 1 arcsec, not performing phaseshift\n\n")
                             
                             self.result.success_count   +=   1
-                            count               =   lf.put_value(f"{success_val}", self.colnames.working_col, count)
+                            _               =   lf.put_value(f"{success_val}", self.colnames.working_col, 1)
                         except Exception as e:
                             traceback.print_exc()
                             log.exception(e)
                             errfile              =   latest_file(Path(wd_ifolder).parent, pattern='*mpi*err*')
                             self.result.failed_count               =   lf.put_value(f"{errfile}", self.colnames.comment_col, self.result.failed_count)
-                            _                    =   lf.put_value(f"failed", self.colnames.working_col, self.result.failed_count)
+                            _                    =   lf.put_value("failed", self.colnames.working_col, self.result.failed_count)
         self.result.end_stamp   = datetime.now()
         
         return self.result

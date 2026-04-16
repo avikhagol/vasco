@@ -12,15 +12,6 @@ The pipeline steps can be invoked using the following command:
   vasco pipe run --t TARGET_NAME --f fitsfilenames
 
 
-::
-
-   CWD (with vasco.inp)
-   └── reductions/
-       └── PROJECT_CODE/
-           └── wd/
-               └── wd_{BAND}/
-                   └── wd_{BAND}_{TARGET_NAME}/
-
 Flowchart
 ---------
 .. raw:: html
@@ -89,7 +80,7 @@ Phaseshift
 ----------
 
   - Works if coordinate file was provided e.g `class_search_coord.ascii`.
-  - Match sources by coordinate and phaseshift if not coordinates within ``1 arcmin``.
+  - Match sources by coordinate and phaseshift if not coordinates within ``1 arcsecond``.
 
 
 Average Measurement Set
