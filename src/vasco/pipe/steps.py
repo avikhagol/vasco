@@ -89,14 +89,15 @@ class PreProcessFitsIdi(PipelineStepBase):
         
         with step_stage("fix minor issues"):
             tmpfitsfiles = tuple([ff + ".tmp" for ff in deepcopy(fitsfiles)])
-            if verbose: print("doing chmod..")
-            os.chmod(tmpfits, stat.S_IRUSR | stat.S_IWUSR |  # Owner read/write
-                     stat.S_IRGRP |               # Group read
-                     stat.S_IROTH)                # Others read
-            if verbose: print("chmod done..")
+            
             for i, ff in enumerate(fitsfiles):
                 tmpff = tmpfitsfiles[i]
                 shutil.copy(ff, tmpff)
+                if verbose: print("doing chmod..")
+                os.chmod(tmpff, stat.S_IRUSR | stat.S_IWUSR |  # Owner read/write
+                     stat.S_IRGRP |               # Group read
+                     stat.S_IROTH)                # Others read
+                if verbose: print("chmod done..")
                 result_minor_fixes      =   fitsidi_check(fitsfilepath=tmpff).filter_codes('extra_byte', 'binary', 'date').run(fix=True)
                 self.output_printable += str(result_minor_fixes)
                 log.info(result_minor_fixes)
