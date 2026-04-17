@@ -13,13 +13,30 @@ FITS-IDI Utility
 Read/Write
 -------------
 
-vasco.fitsidiutil.io
+vasco.fitsidiutil.read_idi
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: vasco.fitsidiutil.read_idi
+
+
+vasco.fitsidiutil.io.FITSIDI
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: vasco.fitsidiutil.io
-   :members:
-   :no-undoc-members:
-   :show-inheritance:
+.. autoclass:: vasco.fitsidiutil.io.FITSIDI
+
+
+vasco.fitsidiutil.io.FITSIDI.quickread
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: vasco.fitsidiutil.io.FITSIDI.quickread
+
+
+vasco.fitsidiutil.io.FITSIDI.iter_read
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: vasco.fitsidiutil.io.FITSIDI.iter_read
+
+
 
    
 
@@ -39,11 +56,8 @@ vasco.fitsidiutil.split
 Operations
 -------------
 
-vasco.fitsidiutil.op
+vasco.fitsidiutil.op.find_refant
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: vasco.fitsidiutil.op
-   :members:
-   :no-undoc-members:
-   :show-inheritance:
+.. autofunction:: vasco.fitsidiutil.op.find_refant
 

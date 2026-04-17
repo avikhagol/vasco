@@ -198,12 +198,10 @@ def identify_refant(fitsfile, n=4, refants=[], **kwargs):
     dict_refant_selection = refant_found.to_dict(as_series=False)
     return refants, dict_refant_selection
 
-def find_refant(fitsfile, verbose=True, err_onmissing=False, tsys_wt=0.99, nrows_wt=0.95, distance_wt=0.80):
-    """takes fitsfile as input and returns the reference antenna which is good geometrically, observation length, and by TSYS
-    prints table with columns [ANNAME,STD_TSYS,nRows,Distance,c] sorted by best reference antenna;
+"""
 
     Returns:
-    -----
+    
 
     (pandas dataframe)
     sorted dataframe in order of best antenna.
@@ -220,6 +218,32 @@ def find_refant(fitsfile, verbose=True, err_onmissing=False, tsys_wt=0.99, nrows
 
     TODO: prompt on nan values when present in TSYS
 
+    """
+
+def find_refant(fitsfile, verbose=True, err_onmissing=False, tsys_wt=0.99, nrows_wt=0.95, distance_wt=0.80):
+    """
+    Takes fitsfile as input and returns the reference antenna which is sorted in descending by combination of 
+    geometrically, observation length, and by TSYS variability, weights determine preference in parameter.
+    Prints table with columns [ANNAME,STD_TSYS,nRows,Distance,c] sorted by best reference antenna.
+    
+    Note:
+        This logic applies only to identifying the reference antenna using ``TSYS``, ``NROWS_TSYS``,
+        and ``ANTENNA_DIST`` from the FITS-IDI file. Use with caution — these parameters alone
+        may not be sufficient to determine a reliable reference antenna.
+
+    Args:
+        fitsfile (str): path for the fitsfile.
+        verbose (bool, optional): prints generated output. Defaults to True.
+        err_onmissing (bool, optional): raises error if SYSTEM_TEMPERATURE is missing. Defaults to False.
+        tsys_wt (float, optional): weight corresponding to the TSYS variability. Defaults to 0.99.
+        nrows_wt (float, optional): weight corresponding to the number of rows found in TSYS. Defaults to 0.95.
+        distance_wt (float, optional): weight corresponding to the centroid distance. Defaults to 0.80.
+
+    Raises:
+        ValueError:  if SYSTEM_TEMPERATURE is missing
+
+    Returns:
+        (pl.DataFrame, str): table_containing result and printable output.
     """
     fo      =   FITSIDI(fitsfile=fitsfile)
     fo.open()

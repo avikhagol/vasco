@@ -120,7 +120,9 @@ class SplitData:
 def reindex_freqid(fitsfilepath, sel_freqids : List = []):
     """Uses sel_freqids to filter FREQID in FREQUENCY binary table and from the filtered values create a reindexed FREQID from 1,..N
         Similarly filters values in UV_DATA and fixes FREQID=1 on all that found
-        Note: Dont use multiple sel_freqids, currently not supported
+        
+    Note: 
+        Dont use multiple sel_freqids, currently not supported
 
     Args:
         fitsfilepath

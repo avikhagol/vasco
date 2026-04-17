@@ -18,7 +18,17 @@
 Getting Started
 ===============
 
-VLBI and SMILE-based CASA optimizations.
+VLBI and SMILE-based CASA Optimizations
+
+.. asciinema:: 945113
+   :rows: 30
+   :cols: 120
+   :speed: 1.5
+   :theme: dracula
+   :autoplay: 1
+
+.. centered:: Demo of the VASCO pipeline running end-to-end.
+
 
 About
 =====

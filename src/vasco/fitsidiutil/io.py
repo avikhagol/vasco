@@ -45,23 +45,46 @@ FITS_TYPE_MAP = {
 
 # --------------------------------------------------------------
 
+        
+def read_idi(fitsfile, max_chunk=None, start_row=0, chunk_cols=['UV_DATA'], **read_kwargs):
+    """read the table data using chunk, by default reads 1 row for the specified column.
 
-def read_idi(fitsfile, mode='r', **read_kwargs):
-    return FITSIDI.quickread(fitsfile, mode=mode, **read_kwargs)
+    Note:
+        if max_chunk=None, only single rows are read for the specified chunk_cols.
+    
+    Args:
+        fitsfile (_type_): _description_
+        max_chunk (int, optional): maximum number of chunks. Defaults to None.
+        start_row (int, optional): row to start readin from. Defaults to 0.
+        chunk_cols (list, optional): filter chunking only on the selected columns. Defaults to ['UV_DATA'].
+
+    Returns:
+        idiHDUList: The HDU list read from the FITS-IDI file.
+    """
+    return FITSIDI.quickread(fitsfile, mode="r",max_chunk=max_chunk, start_row=start_row, 
+                             chunk_cols=chunk_cols, **read_kwargs)
 
 class FITSIDI:
     """
-    - read IDIFITS file and show data in a polars DataFrame.
-    - update headers and tables by columns
+    - Read IDIFITS file 
+    - use .df with hdu to show data in a polars DataFrame.
+    - Update headers and table data by columns
     
-    example :
-    
-    ```python
-    
-    with FITSIDI(fitsfile).open('r') as fo:
-        hdul = fo.read()
-    
-    
+    Note:
+            Write mode is experimental, use with caution.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        with FITSIDI(fitsfilepath).open('r') as fo:
+            hdul = fo.read()
+
+        # or
+        from vasco.fitsidiutil import read_idi
+        hdul = read_idi(fitsfilepath)
+                
     """
     
     def __init__(self, fitsfile, mode='r'):
@@ -144,35 +167,67 @@ class FITSIDI:
     def flush(self):
         self._reader.flush()
     
-    def iter_read(self, total_rows, size_chunk=50_000):
+    def iter_read(self, total_rows, size_chunk=50_000, chunk_cols=['UV_DATA']):
+        """Allows to iterate by chunk by returning a hdul generator.
+        
+        Args:
+            total_rows (int): total number of rows.
+            size_chunk (int, optional): size of chunk in number of rows. Defaults to 50_000.
+            chunk_cols (list, optional): filter chunking only on the selected columns. Defaults to ['UV_DATA'].
+
+        Yields (generator):
+            hdul: (FITSIDI.idiHDUList)
+        
+        Example:
+        --------
+        
+        .. code-block:: python
+
+            hdul_gen =fo.iter_read(total_rows, size_chunk=size_chunk)
+            source_id_uvdata = set()
+            for i, hdul in enumerate(hdul_gen):
+                source_found_in_chunk = (
+                    hdul['UV_DATA'].df
+                        .select('SOURCE')
+                        .unique()
+                        .to_series()
+                        .to_list()
+                    )
+                source_id_uvdata.update(found_in_chunk))
+            
+        """
         for start_row in range(0, total_rows, size_chunk):
             rows_to_read = min(size_chunk, total_rows - start_row)
-            current_hdu_chunk = self.read(rows_to_read, start_row=start_row)
+            current_hdu_chunk = self.read(rows_to_read, start_row=start_row, chunk_cols=chunk_cols)
             yield current_hdu_chunk
             current_hdu_chunk = None
     
     @classmethod
     def quickread(cls, fitsfile, mode='r', **read_kwargs):
-        """read the table data using chunk, by default reads everything
+        """read the table data using chunk, by default reads 1 row.
 
         Args:
             max_chunk (int, optional): maximum number of chunks. Defaults to None.
             start_row (int, optional): row to start readin from. Defaults to 0.
             chunk_cols (list, optional): filter chunking only on the selected columns. Defaults to ['UV_DATA'].
 
+            NOTE: if max_chunk=None, only single rows are read for the specified chunk_cols.
+
         Returns:
-            hdul (idiHDUList)
+            hdul (FITSIDI.idiHDUList)
         """
         with cls(fitsfile).open(mode) as fo:
             return fo.read(**read_kwargs)
         
     def read(self, max_chunk=None, start_row=0, chunk_cols=['UV_DATA']):
-        """read the table data using chunk, by default reads everything
+        """read the table data using chunk, by default reads 1 row.
 
         Args:
             max_chunk (int, optional): maximum number of chunks. Defaults to None.
             start_row (int, optional): row to start readin from. Defaults to 0.
             chunk_cols (list, optional): filter chunking only on the selected columns. Defaults to ['UV_DATA'].
+
+            NOTE: if max_chunk=None, only single rows are read for the specified chunk_cols.
 
         Returns:
             hdul (idiHDUList)

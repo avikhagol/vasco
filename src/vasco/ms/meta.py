@@ -9,13 +9,29 @@ class BandInfoMS:
     """
     ______________________________________________________
     
-    - get band information about MS
-    - band name, spws, reffreqs
-    
-    check_band_ms -> Dict
-    {"band":
-            {"spws":[spw_id], "reffreqs":[FREQ_Hz], "nobs":int, 
-            "obs=OBSID": {"scans": {spw_id: [scans]]}} }}
+    Retrieve band information from a Measurement Set.
+
+    Returns a dictionary of band metadata including band name, spectral windows,
+    and reference frequencies, structured as follows:
+
+    .. code-block:: python
+        BandInfoMS(vis, min_expt=1.5).check_bands_ms
+        {
+            "<band>": {
+                "spws":     [spw_id, ...],
+                "reffreqs": [freq_hz, ...],
+                "nobs":     int,
+                "obs=<OBSID>": {
+                    "scans": {
+                        spw_id: [scan_id, ...]
+                    }
+                }
+            }
+        }
+
+    Returns:
+        dict: Band information keyed by band name.
+
     
     _____________________________________________________
         
@@ -38,16 +54,30 @@ class BandInfoMS:
                 
     def check_bands_ms(self):
         """
-        Returns
-        ---
-        (Dict) 
-        {"band":
-            {"spws":[spw_id], "reffreqs":[FREQ_Hz], "nobs":int, 
-            "obs=OBSID": {"scans": {spw_id: [scans]]}} }}
+        Retrieve band information from a Measurement Set.
 
-        'band': str = "C" |  "X" | "S" | "L" | "K" ...
-        reffreqs: List[int] (Hz)
-        spws : List[int]
+        Returns a dictionary of band metadata including band name, spectral windows,
+        and reference frequencies, structured as follows:
+
+        .. code-block:: python
+        
+            BandInfoMS(vis, min_expt=1.5).check_bands_ms
+            {
+                "<band>": {
+                    "spws":     [spw_id, ...],
+                    "reffreqs": [freq_hz, ...],
+                    "nobs":     int,
+                    "obs=<OBSID>": {
+                        "scans": {
+                            spw_id: [scan_id, ...]
+                        }
+                    }
+                }
+            }
+
+        Returns:
+            dict: Band information keyed by band name.
+
 
         """
         
