@@ -1,7 +1,10 @@
 # vasco
-VASCO: VLBI and SMILE source based CASA Optimizations
+VASCO: VLBI and SMILE source based CASA Optimizations.
 
 > submitted to A&A
+
+[![asciicast](https://asciinema.org/a/945113.svg)](https://asciinema.org/a/945113)
+> Demo of the VASCO pipeline running end-to-end.
 
 
 # Installation
