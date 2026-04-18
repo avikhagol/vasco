@@ -13,6 +13,7 @@ set_property(GLOBAL PROPERTY JOB_POOLS one_jobs=4 two_jobs=8)
 # set(PYBIND11_NEWPYTHON ON)
 include(FetchContent)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_STANDARD 17) # nullptr reserved with newer C23
 
 # set versions
 set(CFITSIO_VERSION 4.5.0)
@@ -30,7 +31,6 @@ find_package(pybind11 CONFIG REQUIRED)
 
 set(USE_CURL OFF CACHE BOOL "" FORCE)
 set(USE_PTHREADS OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
 FetchContent_Declare(cfitsio URL https://github.com/HEASARC/cfitsio/archive/refs/tags/cfitsio-${CFITSIO_VERSION}.tar.gz)
 FetchContent_MakeAvailable(cfitsio)
@@ -57,7 +57,7 @@ set_target_properties(${FITSIDIUTIL_MODULE} PROPERTIES
     JOB_POOL_LINK two_jobs
 )
 
-message(STATUS "CFITSIO target exists: ${CFITSIO_LIBRARIES} ${cfitsio_SOURCE_DIR} ${cfitsio_DIR} ${cfitsio_BUILD} ${ORGIN}")
+message(STATUS "CFITSIO target exists: ${CFITSIO_LIBRARIES} ${cfitsio_SOURCE_DIR} ${cfitsio_DIR} ${cfitsio_BUILD} ${ORIGIN}")
 if(NOT TARGET cfitsio::cfitsio)
     message(FATAL_ERROR "cfitsio::cfitsio is not a TARGET")
 endif()
