@@ -9,6 +9,9 @@ VASCO: VLBI and SMILE source based CASA Optimizations.
 
 # Installation
 
+> Needs Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+ \
+> Python 3.9 &ndash; 3.13
+
 
 ```bash
 
