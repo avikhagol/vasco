@@ -318,9 +318,9 @@ class FitsIdiToMS(PipelineStepBase):
                 _           =   del_fl(Path(wd_ifolder_payload).parent, 1,fl="*stored*", rm=True)
                 _           =   del_fl(Path(wd_ifolder_payload).parent, 1,fl="*tmp*", rm=True)
         
-        with step_stage("payload execution", vis=vis):
-            payload                     =   MpiCasaPayload(tasks_list=tasks_list)
-            payload.run()
+            with step_stage("payload execution", vis=vis):
+                payload                     =   MpiCasaPayload(tasks_list=tasks_list)
+                payload.run()
         
         
         # ---------------- finalize outputs and metadata

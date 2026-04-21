@@ -35,6 +35,10 @@ with as_file(ref) as rfc_filepath:
 ref = files("vasco.pipe") / "data" / "smile_complete_table.txt"
 with as_file(ref) as smile_sample_filepath:
     SMILE_SAMPLE_CATALOG_ASCII = str(smile_sample_filepath) 
+
+ref = files("vasco.pipe") / "data" / "vlba_gains.key"
+with as_file(ref) as vlba_gains_key:
+    VLBA_GAINS_KEY = str(vlba_gains_key) 
     
 try:
     import pandas as pd

@@ -34,7 +34,7 @@ foreach my $item (@cmd_list_json){
     my @run_cmd_list;
 
     if ($mpi != 0) {
-        push(@run_cmd_list, $casadir . "bin/mpicasa", "--oversubscribe", "-n", $mpi, "--mca", "hwloc_base_binding_policy", "none");
+        push(@run_cmd_list, $casadir . "bin/mpicasa", "--oversubscribe", "-n", $mpi);
     }
 
     my @task_cmd_list;

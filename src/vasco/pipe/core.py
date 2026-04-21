@@ -1,4 +1,4 @@
-from vasco.pipe.config import MPI_CASA_PERL_SCRIPT, PHASESHIFT_PERL_SCRIPT, MPICASA_WORKER
+from vasco.pipe.config import MPI_CASA_PERL_SCRIPT, PHASESHIFT_PERL_SCRIPT, MPICASA_WORKER, VLBA_GAINS_KEY
 import subprocess
 import sys
 from pathlib import Path
@@ -1262,13 +1262,13 @@ class GenerateAndAppendAntab:
                     print("using", gf)
                     for gzippable_format in ['.Z', '.gz']:
                         if gzippable_format in gf:
-                            subprocess.run(['gzip', '-d', gf])
+                            subprocess.run(['gzip', '-df', gf])
                             gf          =   gf.replace(gzippable_format,'')
                     if attach_all or (gf not in self.tsysfiles):
                         try:
                             an              =   ANTAB(fitsfile, gf)
                             anfile          =   f'{antabfile}.{i}'
-                            allans, _tsys_head, gain_missing    = an.gen_antab(anfile)
+                            allans, _tsys_head, gain_missing    = an.gen_antab(anfile, vlbagainfile=VLBA_GAINS_KEY)
                             if bsize<float(FileSize(gf).B):
                                 found_gf    =   gf
                                 bsize       =   float(FileSize(gf).B)
@@ -1300,7 +1300,7 @@ class GenerateAndAppendAntab:
                             
                     alldobs = [get_dateobs(fitsfile_tmp) for fitsfile_tmp in self.tmpfs]
                     dict_res = parse_antab(antabfile=antabfile, fitsfile=self.tmpfs[0])
-                    print(dict_res.keys())
+                    # print(dict_res.keys())
                     antab_start_time    = dict_res["tsys_dic"]['start_time']
                     antab_end_time      = dict_res["tsys_dic"]['end_time']
                     
