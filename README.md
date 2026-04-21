@@ -1,6 +1,8 @@
 # vasco
 VASCO: VLBI and SMILE source based CASA Optimizations.
 
+Documentation : https://vasco-vlbi.readthedocs.io/en/latest/
+
 > submitted to A&A
 
 [![asciicast](https://asciinema.org/a/945113.svg)](https://asciinema.org/a/945113)
@@ -12,16 +14,38 @@ VASCO: VLBI and SMILE source based CASA Optimizations.
 > Needs Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+ \
 > Python 3.9 
  
-Because monolithic `casa` ships with its own python3 installation. It is recommended to install `vasco` in a python environment, with either the same version of python as `casa`, or use the `casa` python itself to create a virtual environment first. This is needed if "all" is not used for installation:   
-```
-/path/to/casadir/bin/python3 -m venv MY_ENV_DIR
-source MY_ENV_DIR/bin/activate
+
+Since the monolithic version of casa includes its own internal Python 3 installation, 
+it is best to install vasco within a Python environment that matches the casa version.
+
+Specifically, if you are not using the "all" installation option, 
+you should use the casa Python executable itself to create a virtual environment first:
+
+```bash
+   
+   $ /path/to/casadir/bin/python3 -m venv MY_ENV_DIR
+   $ source MY_ENV_DIR/bin/activate
+
 ```
 
 ```bash
 
-pip install vasco[all]
+   $ pip install vasco
+
 ```
+
+Alternatively, you can use the following installation method, 
+which automatically includes the necessary casa dependency for vasco's internal operations.
+
+```bash
+
+   $ pip install vasco[all]
+
+```
+
+Note that you must still provide the path to your casadir. 
+This ensures that the pipeline uses the same monolithic casa version, ideally the one downloaded for 
+rPicard to execute specific tasks like mstransform and importfitsidi within an isolated environment.
 
 ## Manual
 
@@ -36,7 +60,7 @@ git clone --recurse-submodules https://github.com/avikhagol/vasco.git
 ```bash
 cd vasco/
 
-pip install .[all]
+pip install .
 
 ```
 

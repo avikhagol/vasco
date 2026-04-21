@@ -5,7 +5,7 @@ vasco.ms
 ^^^^^^^^
 
 vasco.ms.meta.BandInfoMS.check_bands_ms
-----------------------------
+----------------------------------------
 
 .. autofunction:: vasco.ms.meta.BandInfoMS.check_bands_ms
 

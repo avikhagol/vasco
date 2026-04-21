@@ -39,15 +39,38 @@ It provides modules to ingest, manipulate, and calibrate *FITS-IDI* and *Measure
 Installation
 ============
 
+Since the monolithic version of casa includes its own internal Python 3 installation, 
+it is best to install vasco within a Python environment that matches the casa version.
+
+Specifically, if you are not using the "all" installation option, 
+you should use the casa Python executable itself to create a virtual environment first:
+
+.. code-block:: bash
+   
+   $ /path/to/casadir/bin/python3 -m venv MY_ENV_DIR
+   $ source MY_ENV_DIR/bin/activate
+
+
+.. code-block:: bash
+
+   $ pip install vasco
+
+Alternatively, you can use the following installation method, 
+which automatically includes the necessary casa dependency for vasco's internal operations.
+
 .. code-block:: bash
 
    $ pip install vasco[all]
 
+Note that you must still provide the path to your casadir. 
+This ensures that the pipeline uses the same monolithic casa version, ideally the one downloaded for 
+rPicard to execute specific tasks like mstransform and importfitsidi within an isolated environment.
+
 Setup
 =====
 
-The pipeline functionality for calibration depends on `rPicard`_. Follow the setup instructions following the link.
-Once rPicard has been successfully configured, only a minimal **vasco** configuration file is required.
+Since the pipeline’s calibration features rely on `rPicard`_ please follow the linked setup instructions first.
+Once **rPicard** is properly configured, you only need a minimal vasco configuration file to get started.
 
 .. _rPicard: https://bitbucket.org/M_Janssen/picard/src/master/
 
@@ -61,6 +84,7 @@ The pipeline is configured via a plain-text file in the current working director
    # Required
    folder_for_fits         =  "reductions/"
    target_dir              =  "/path/to/target/dir"
+   casadir                 =  "path/to/monolithic-casa/casa-6.x.x-xx-py3.xx.xxx/"
 
    # Optional
    picard_input_template   =  "/path/to/input_template"
