@@ -69,7 +69,7 @@ rPicard to execute specific tasks like mstransform and importfitsidi within an i
 Setup
 =====
 
-Since the pipeline’s calibration features rely on `rPicard`_ please follow the linked setup instructions first.
+Since the pipeline's calibration features rely on `rPicard`_ please follow the linked setup instructions first.
 Once **rPicard** is properly configured, you only need a minimal vasco configuration file to get started.
 
 .. _rPicard: https://bitbucket.org/M_Janssen/picard/src/master/
