@@ -651,21 +651,20 @@ class AverageMS(PipelineStepBase):
                         succeed         =   len(success_band)/len(bands_known)                                                       # this should update for each freqid 
                         comment_val     =   " ".join([f"{b}:{w} kHz" for b,w in band_chwidth.items() if b in success_band])
                         success_val     =   " ".join([f"{b}:{td_b}" for b,td_b in self.result.detail.items()])
-                        
+                        self.result.success_count       =   len(success_band)
+                        self.result.failed_count        +=  len(bands_known) -len(success_band)
                         if succeed  == 1:
                             # success_val =   lf.get_value(col) + ' ' + success_val if lf.get_value(col) else success_val
                             comment_val                     =   lf.get_value(self.colnames.comment_col) + ' ' + comment_val if lf.get_value(self.colnames.comment_col) else comment_val
-                            self.result.success_count       +=  1
                             _                               =   lf.put_value(success_val, self.colnames.working_col, self.result.success_count)        
                             _                               =   lf.put_value(comment_val, self.colnames.comment_col)
                             
                         elif succeed>0:
                             _                               =   lf.put_value(success_val, self.colnames.working_col, self.result.success_count)
                             failed_band                     =   " ".join([f"{b}: failed" for b,w in band_chwidth.items() if b not in success_band])
-                            self.result.failed_count        +=  1
+                            
                             _                               =   lf.put_value(f'{comment_val} {failed_band}', self.colnames.comment_col, self.result.failed_count)
                         else:
-                            self.result.failed_count        +=  1
                             _                               =   lf.put_value('failed', self.colnames.working_col, self.result.failed_count)
                             
                     except Exception as e:
