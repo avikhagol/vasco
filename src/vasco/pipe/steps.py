@@ -13,7 +13,6 @@ import stat
 import traceback
 import glob
 import numpy as np
-import json
 import subprocess
 
 from vasco.fitsidiutil.op import count_tsys_in_fitsfile
@@ -21,7 +20,7 @@ from vasco.fitsidiutil.op import count_tsys_in_fitsfile
 from .helpers import del_fl, count_freqids, meta_from_fitsfile, meta_from_fitsfile_freqid, get_logfilename, single_ifcheck, fillinp_fromiwd, read_vasco_sources_msmeta
 from .helpers import alls_fromobs, update_from_vascometa, check_target_in_ms, fits_has_target, fill_input_byvalues
 
-from .core import PipelineStepBase, StepResult, VascoResult, ColName, PipelineContext, WorkDirMeta
+from .core import PipelineStepBase, StepResult, ColName, PipelineContext, WorkDirMeta
 from .core import step_stage, InitVariables, RunValidation,  UpdateResults, UpdateSheet, CasaSetup
 from .core import ImportFITSIdi, MsTransform, MpiCasaPayload, PicardPayload, GenerateAndAppendAntab, PicardTask
 from .config import PHASESHIFT_PERL_SCRIPT
@@ -815,7 +814,7 @@ class SnRating(PipelineStepBase):
     
     # ----------------------------------------------------------
     
-    def run(self, lf, wd_ifolder, init_params, casadir, target, n_refant=5, n_calib=6, multiband_snrating=True, snrating_mpi_cores=5, n_scan_snrting=7, verbose=True):
+    def run(self, lf, wd_ifolder, init_params, casadir, target, n_refant=5, n_calib=6, multiband_snrating=True, mpi_cores_snrating=5, n_scan_snrting=7, verbose=True):
         self.result.start_stamp   = datetime.now()
         from vasco.ms import get_best_spws
         from vasco.pipe.tasks.fringefit import exec_FFT_fringefit
@@ -895,7 +894,7 @@ class SnRating(PipelineStepBase):
                             with step_stage(msg):
                                 try:
                                     dic_field, refants, pp_out      =   exec_FFT_fringefit(fr, casadir=casadir,logfile=casalogfile,errfile=errcasalogfile,
-                                                                                                mpi_cores=snrating_mpi_cores,multiband=multiband_snrating)
+                                                                                                mpi_cores=mpi_cores_snrating,multiband=multiband_snrating)
 
                                     msg                             =   f"finished fringefit for {Path(vis_b).name}"
                                     log.info(msg)
