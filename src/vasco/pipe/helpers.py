@@ -1353,8 +1353,12 @@ def check_target_in_ms(vis, target):
         
         alls = msmd.fieldnames()
         if target in alls:
-            if len(msmd.scansforfield(target)):
-                found = True
+            try:
+                if len(msmd.scansforfield(target)):
+                    found = True
+            except Exception:
+                traceback.print_exc()
+                found=False
             
     return found
 
