@@ -573,7 +573,7 @@ class ANTAB:
                                 antab_header            =   f"GAIN {an} {mount} DPFU={','.join(map(str,dpfu))} "
                                 # antab_header            +=  f"FREQ={','.join(freq_range)} "
                                 antab_header            +=  f"POLY={','.join(map(str,poly))} /"
-                                antab_header            +=  f"\nTSYS {an} {' '.join(an_values)} INDEX= {','.join(ind)} /\n"
+                                antab_header            +=  f"\nTSYS {an} {' '.join(an_values)} INDEX={','.join(ind)} /\n"
                                 pols, ind               =   [], []
                                 # print(antab_header)
                                 if ant_header_count:
