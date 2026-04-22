@@ -351,7 +351,7 @@ def process_gc_values(infp, keys, pols, idi, data):
         antenna = idi.antenna_map[antenna_name]
     except:
         print('Antenna %s not present in FITS-IDI file' % antenna_name)
-        # skip_values(infp)     # avi: this ignores the next line, which is the TSYS header and values, handled outside of this function
+        skip_values(infp)     # avi: this ignores the next line, which is the TSYS header and values, handled outside of this function
         return
     keys = dict(keys[0])
 

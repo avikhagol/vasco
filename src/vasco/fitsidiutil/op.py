@@ -570,9 +570,9 @@ class ANTAB:
 
                                 an_values               =   [f"{k.upper()}={v}" for k,v in _tsys_head[an].items()]
 
-                                antab_header            =   f"GAIN {an} {mount} DPFU={', '.join(map(str,dpfu))} "
-                                # antab_header            +=  f"FREQ={', '.join(freq_range)} "
-                                antab_header            +=  f"POLY={', '.join(map(str,poly))} /"
+                                antab_header            =   f"GAIN {an} {mount} DPFU={','.join(map(str,dpfu))} "
+                                # antab_header            +=  f"FREQ={','.join(freq_range)} "
+                                antab_header            +=  f"POLY={','.join(map(str,poly))} /"
                                 antab_header            +=  f"\nTSYS {an} {' '.join(an_values)} INDEX= {','.join(ind)} /\n"
                                 pols, ind               =   [], []
                                 # print(antab_header)
@@ -793,7 +793,7 @@ def find_gain(vlbagainfile, an, obsdate, freq):
         mount, dpfu, poly = df_selected['MOUNT'], df_selected['DPFU'], df_selected['POLY']
     except:
         print(f"failed for {an} with {obsdate} and {freq}MHz")
-    # print(f"{an} GAIN {df_selected['MOUNT']} DPFU = {', '.join(map(str,df_selected['DPFU']))} POLY = {', '.join(map(str,df_selected['POLY']))} /")
+    # print(f"{an} GAIN {df_selected['MOUNT']} DPFU = {','.join(map(str,df_selected['DPFU']))} POLY = {','.join(map(str,df_selected['POLY']))} /")
     return mount, dpfu, poly
 
 def get_vlbagains(fl='vlba_gains.key', outfile='vlba_gains.key'):
