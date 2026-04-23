@@ -152,6 +152,7 @@ class PreProcessFitsIdi(PipelineStepBase):
             
             fitsfiles_used  =   fitsfiles
             if multifreqid:
+                log.info("observation has multiple frequennct IDs")
                 res_splitdata   = split_in_freqid(fitsfiles=fitsfiles, verbose=verbose) # result = {"workingfits": workingfits, "split_result": split_result}
                 
                 for ff in res_splitdata['split_result']:
@@ -774,7 +775,8 @@ class VascoMetaMS(PipelineStepBase):
                                                                self.result.success_count)
                 elif succeed > 0:
                     failed_band                 = " ".join([f"{b}:failed" for b, (s, _) in vasco_b.items() if not s])
-                    self.result.failed_count    +=  1
+                    self.result.failed_count    =  len(bands)-len(success_band)
+                    self.result.success_count   =   len(success_band)
                     _                           = lf.put_value(success_val, self.colnames.working_col,
                                                                self.result.success_count)
                     _                           = lf.put_value(failed_band, self.colnames.comment_col,

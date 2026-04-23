@@ -56,7 +56,6 @@ from collections import UserList
 import inspect
 import traceback
 import logging
-
 import warnings
 
 SERVER_PORT = 5030
@@ -1508,8 +1507,6 @@ class FlagData(CasaTask):
 
 
 
-import threading
-
 class IterativeSubprocess:
     def __init__(self, cmd_list, clean_env=True, verbose=True):
         self.verbose = verbose
@@ -1663,10 +1660,9 @@ def run_subprocess(cmd_list: List[str], inp_data: dict, mode: str = "stdin", cle
 
     success = process.returncode == 0
 
-    if not success:
-        # temporary debug — always print stderr
-        print("STDERR:\n", "".join(stderr_lines), flush=True)
-        print("STDOUT:\n", "".join(stdout_lines), flush=True)
+    # if not success:
+        # print("STDERR:\n", "".join(stderr_lines), flush=True)
+        # print("STDOUT:\n", "".join(stdout_lines), flush=True)
 
     for line in reversed(stdout_lines):
         line = line.strip()
