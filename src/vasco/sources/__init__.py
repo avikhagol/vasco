@@ -1,5 +1,5 @@
 import numpy as np
-from pandas import DataFrame as df
+from pandas import DataFrame as df, to_numeric
 import itertools
 
 def check_band(freq, bands=None):
@@ -294,7 +294,7 @@ def identify_calibrators(t, target, ps, flux_thres, flux_df, min_flux=0.025, nca
     calib,least_calib           =   {}, 1
     calib_df                    =   df(list(t.sourcenames.values()), index=list(t.sourcenames.keys()), columns=['source_name'])
     calib_df.loc[:, 'flux']     =   flux_df
-    calib_df['flux']            =   calib_df['flux'].fillna(0).astype(float)
+    calib_df['flux']            =   to_numeric(calib_df['flux'], errors='coerce').fillna(0.0)
     calib_df                    =   calib_df.sort_values(by=['flux'], ascending=[False])
     target_flux                 =   calib_df.loc[calib_df['source_name']==target]['flux'].values[0]
     chk_flux                    =   min_flux
