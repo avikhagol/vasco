@@ -768,22 +768,20 @@ class VascoMetaMS(PipelineStepBase):
                 vasco_sources_ms    = glob.glob(str(metafolder / f'sources_ms_*_{target}.vasco'))
                 succeed             = len(success_band) / len(bands) if bands else 0
                 success_val         = " ".join([f"{b}:{'ok' if s else e}" for b, (s, e) in vasco_b.items()])
-
+                self.result.success_count   =   len(success_band)
+                self.result.failed_count    =  len(bands)-len(success_band)
                 if succeed == 1:
-                    self.result.success_count   += 1
                     _                           = lf.put_value(success_val, self.colnames.working_col,
                                                                self.result.success_count)
                 elif succeed > 0:
                     failed_band                 = " ".join([f"{b}:failed" for b, (s, _) in vasco_b.items() if not s])
-                    self.result.failed_count    =  len(bands)-len(success_band)
-                    self.result.success_count   =   len(success_band)
+                    
                     _                           = lf.put_value(success_val, self.colnames.working_col,
                                                                self.result.success_count)
                     _                           = lf.put_value(failed_band, self.colnames.comment_col,
                                                                self.result.failed_count)
 
                 else:
-                    self.result.failed_count    +=  1
                     _                           = lf.put_value('failed', self.colnames.working_col,
                                                                self.result.failed_count)
 
