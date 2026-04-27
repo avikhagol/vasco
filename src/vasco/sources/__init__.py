@@ -109,9 +109,9 @@ def find_phaseref_pairs(c_target, target, c_others, others, scanlist_seq, source
             if id_found is None: id_found = find_first_occurrence(scanlist_seq, (id_target, id_ps))
             if id_found : closer_scan = 1
             chances[i]              =   (np.round(((1/sep_limit)*p_sep + closer_scan)/2, 3))
-        print(others)
-        print(chances)
-        print(other_dict,"\n",list(other_dict.keys()))
+        # print(others)
+        # print(chances)
+        # print(other_dict,"\n",list(other_dict.keys()))
         res                         =   df()
         res                         =   df(zip(others, chances), index=list(other_dict.keys()), columns=['source', 'chances'])
         res                         =   res.sort_values(by=['chances'], ascending=[False])    
@@ -294,7 +294,7 @@ def identify_calibrators(t, target, ps, flux_thres, flux_df, min_flux=0.025, nca
     calib,least_calib           =   {}, 1
     calib_df                    =   df(list(t.sourcenames.values()), index=list(t.sourcenames.keys()), columns=['source_name'])
     calib_df.loc[:, 'flux']     =   flux_df
-    fx = calib_df['flux']       =   calib_df['flux'].fillna(0)
+    fx = calib_df['flux']       =   calib_df['flux'].fillna(0).infer_objects(copy=False)
     calib_df                    =   calib_df.sort_values(by=['flux'], ascending=[False])
     target_flux                 =   calib_df.loc[calib_df['source_name']==target]['flux'].values[0]
     chk_flux                    =   min_flux
@@ -445,7 +445,7 @@ def identify_sources_fromtarget(scanlist_seq, sourcenames, target_source, other_
                         s['calibrators_instrphase'].remove(ps)
                     # s['phaseref_ff_science'] = False # for weak science target, setting true means, `the science targets are strong enough for a residual fringe-fit`
                     
-            if verbose: print(f'target is in phref but {msg}')
+            if verbose: print(f'target is in phref {msg}')
         
     if target_source in s['calibrators_instrphase']:    s['calibrators_instrphase'].remove(target_source)
     
