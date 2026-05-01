@@ -18,7 +18,7 @@
 Getting Started
 ===============
 
-Automated VLBI pipeline in CASA.
+AVICA: Automated VLBI pipeline in CASA.
 
 .. asciinema:: 945113
    :rows: 30
