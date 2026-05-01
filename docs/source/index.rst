@@ -42,8 +42,6 @@ Installation
 Since the monolithic version of casa includes its own internal Python 3 installation,
 it is best to install avica within a Python environment that matches the casa version.
 
-Specifically, if you are not using the "all" installation option,
-you should use the casa Python executable itself to create a virtual environment first:
 
 .. code-block:: bash
 
