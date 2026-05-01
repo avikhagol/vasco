@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional
 
 import resource
 import typer
+import textwrap
+from rich.console import Console
+from rich.panel import Panel
+
 from typing_extensions import Annotated
 from avica.config import avica_data_dir
 
 from avica.util import casadir_find, rfc_find
-from avica.pipe.config import CSV_POPULATED_STEPS, PipeConfig, DEFAULT_PARAMS
+from avica.pipe.config import CSV_POPULATED_STEPS, PipeConfig
 
 from avica.pipe.main import AvicaPipeline
-from avica.pipe.core import PipelineContext
 
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (26000, rlimit[1]))
@@ -25,23 +28,28 @@ X  = "\033[0m"
 
 rfc_filepath = f"{avicadir}/rfc_path.txt"
 
-ASCII_ART = """\b[bold cyan]
-
+ASCII_ART = """\b
    ____     __    __    _____     ____     ____
   (    )    ) )  ( (   (_   _)   / ___)   (    )
-  / /\ \   ( (    ) )    | |    / /       / /\ \
- ( (__) )   \ \  / /     | |   ( (       ( (__) )
-  )    (     \ \/ /      | |   ( (        )    (
- /  /\  \     \  /      _| |__  \ \___   /  /\  \
-/__(  )__\     \/      /_____(   \____) /__(  )__\
+  / /\\ \\   ( (    ) )    | |    / /       / /\\ \\
+ ( (__) )   \\ \\  / /     | |   ( (       ( (__) )
+  )    (     \\ \\/ /      | |   ( (        )    (
+ /  /\\  \\     \\  /      _| |__  \\ \\___   /  /\\  \\
+/__(  )__\\     \\/      /_____(   \\____) /__(  )__\\
 
 
-    Automated VLBI pipeline in CASA
-[/bold cyan]
-"""
+    Automated VLBI pipeline in CASA"""
 
-avica_cli = typer.Typer(name="avica",help=f"{ASCII_ART}",add_completion=False,rich_markup_mode="rich")
+avica_cli = typer.Typer(name="avica",help=ASCII_ART,#"AVICA: Automated VLBI pipeline in CASA",
+    add_completion=False, rich_markup_mode="rich")
 
+console = Console()
+
+@avica_cli.callback(invoke_without_command=True)
+def main(ctx: typer.Context):
+    if ctx.invoked_subcommand is None:
+        console = Console()
+        console.print(Panel(ASCII_ART, style="cyan", expand=False))
 
 # ________________________________________________________________________________
 #

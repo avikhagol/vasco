@@ -57,7 +57,7 @@ avica = "avica:cli_new"
 fitsidiutil = "avica.fitsidiutil.cli:fitsidiutil_cli"
 
 [tool.scikit-build]
-# cmake.build-type = "Release"
+cmake.build-type = "Release"
 cmake.verbose = true
 cmake.source-dir = "."
 wheel.packages = ["src/avica"]    # locates the associated module
