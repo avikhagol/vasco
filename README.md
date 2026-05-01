@@ -1,4 +1,8 @@
-# vasco
+VLBI and SMILE-based CASA Optimization (VASCO) pipeline has been renamed to AVICA Please update: pip install avica
+
+>AVICA: Automated VLBI pipeline in CASA
+
+<!-- # vasco
 VASCO: VLBI and SMILE source based CASA Optimizations.
 
 Documentation : https://vasco-vlbi.readthedocs.io/en/latest/
@@ -12,18 +16,18 @@ Documentation : https://vasco-vlbi.readthedocs.io/en/latest/
 # Installation
 
 > Needs Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+ \
-> Python 3.9 
+> Python >=3.9
  
 
 Since the monolithic version of casa includes its own internal Python 3 installation, 
 it is best to install vasco within a Python environment that matches the casa version.
 
 Specifically, if you are not using the "all" installation option, 
-you should use the casa Python executable itself to create a virtual environment first:
+you should use the casa Python executable itself to create a virtual environment first. For example, for `casa-6.7.0-31-py3.10.el8/` use a virtual environment created using `Python 3.10`. Conda can be used for creating the environment:
 
 ```bash
    
-   $ /path/to/casadir/bin/python3 -m venv MY_ENV_DIR
+   $ path/to/python3 -m venv MY_ENV_DIR
    $ source MY_ENV_DIR/bin/activate
 
 ```
@@ -52,7 +56,7 @@ rPicard to execute specific tasks like mstransform and importfitsidi within an i
 1. Clone the repository to the desired destination.
 
 ```
-git clone --recurse-submodules https://github.com/avikhagol/vasco.git
+git clone https://github.com/avikhagol/vasco.git
 ```
 
 2. Install using `pip`
@@ -168,4 +172,4 @@ When using VASCO, please add a link to this repository in a footnote.
 
 # Acknowledgement
 
-"VASCO was developed within the "Search for Milli-Lenses" (SMILE) project. SMILE has received funding from the European Research Council (ERC) under the HORIZON ERC Grants 2021 programme (grant agreement No. 101040021).
+"VASCO was developed within the "Search for Milli-Lenses" (SMILE) project. SMILE has received funding from the European Research Council (ERC) under the HORIZON ERC Grants 2021 programme (grant agreement No. 101040021). -->

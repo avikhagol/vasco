@@ -5,6 +5,13 @@ from pathlib import Path
 import json, time, shutil, subprocess
 import resource
 from vasco.cli_new import vasco_cli
+import warnings
+warnings.warn(
+    "vasco pipeline has been renamed to avica. "
+    "Please update: pip install avica",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (26000, rlimit[1]))
@@ -15,15 +22,17 @@ c={"x":"\033[0m","g":"\033[32m", "r":"\033[31m", "b":"\033[34m","c":"\033[36m","
 rfc_filepath        =   f"{vascodir}/rfc_path.txt"
 
 def ascii_art():
-    art="""
-____    ____  ___           _______.  ______   ______   
-\   \  /   / /   \         /       | /      | /  __  \  
- \   \/   / /  ^  \       |   (----`|  ,----'|  |  |  | 
-  \      / /  /_\  \       \   \    |  |     |  |  |  | 
-   \    / /  _____  \  .----)   |   |  `----.|  `--'  | 
-    \__/ /__/     \__\ |_______/     \______| \______/  
-
-    VLBI and SMILE source based CASA Optimizations (VASCO).                                                        
+    art="""                                     
+   ____     __    __    _____     ____     ____    
+  (    )    ) )  ( (   (_   _)   / ___)   (    )   
+  / /\ \   ( (    ) )    | |    / /       / /\ \   
+ ( (__) )   \ \  / /     | |   ( (       ( (__) )  
+  )    (     \ \/ /      | |   ( (        )    (   
+ /  /\  \     \  /      _| |__  \ \___   /  /\  \  
+/__(  )__\     \/      /_____(   \____) /__(  )__\ 
+                                                   
+    
+    Automated VLBI pipeline in CASA.                                           
     
     """
     return art

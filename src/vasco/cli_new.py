@@ -25,19 +25,22 @@ X  = "\033[0m"
 
 rfc_filepath = f"{vascodir}/rfc_path.txt"
 
-ASCII_ART = """\b
-
-____    ____  ___           _______.  ______   ______   
-\   \  /   / /   \         /       | /      | /  __  \  
- \   \/   / /  ^  \       |   (----`|  ,----'|  |  |  | 
-  \      / /  /_\  \       \   \    |  |     |  |  |  | 
-   \    / /  _____  \  .----)   |   |  `----.|  `--'  | 
-    \__/ /__/     \__\ |_______/     \______| \______/  
-
-    VLBI and SMILE-based CASA Optimizations (VASCO).
+ASCII_ART = """\b[bold cyan]
+                                       
+   ____     __    __    _____     ____     ____    
+  (    )    ) )  ( (   (_   _)   / ___)   (    )   
+  / /\ \   ( (    ) )    | |    / /       / /\ \   
+ ( (__) )   \ \  / /     | |   ( (       ( (__) )  
+  )    (     \ \/ /      | |   ( (        )    (   
+ /  /\  \     \  /      _| |__  \ \___   /  /\  \  
+/__(  )__\     \/      /_____(   \____) /__(  )__\ 
+                                                   
+    
+    Automated VLBI pipeline in CASA
+[/bold cyan]    
 """
 
-vasco_cli = typer.Typer(name="vasco",help=f"{ASCII_ART}",add_completion=False,rich_markup_mode="rich")
+vasco_cli = typer.Typer(name="avica",help=f"{ASCII_ART}",add_completion=False,rich_markup_mode="rich")
 
 
 # ________________________________________________________________________________
