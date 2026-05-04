@@ -1,10 +1,6 @@
-from casatools import msmetadata, logsink
+from avica.ms.compat import CasaMSMetadata, ctable
 from avica.util import check_band
 import numpy as np
-
-avicalog=logsink('avica.casa_log')
-avicalog.setlogfile='avica.casa_log'
-avicalog.setglobal(True)
 
 # -------                       Classes
 
@@ -45,13 +41,13 @@ class BandInfoMS:
         self.verbose            =   verbose
         self.min_expt           =   min_expt
 
-        self.msmd               =   msmetadata()
+        self.msmd               =   CasaMSMetadata()
 
         # optional
         self.min_ant_scans      =   min_ant_scans or 2
 
-        #
         self.msmd.open(self.vis)
+
         self.bands_dict         =   self.check_bands_ms()
         self.removable_antennas =   {band:[] for band in self.bands_dict}
 
@@ -84,8 +80,9 @@ class BandInfoMS:
 
         """
 
-        spws = set()                            # get spws
-        spwsforfields = self.msmd.spwsforfields()
+        spws            = set()                            # get spws
+
+        spwsforfields   = self.msmd.spwsforfields()
         for spws_inf in spwsforfields.values():
             spws.update(spws_inf)
 
@@ -121,27 +118,25 @@ class BandInfoMS:
                         d[band][f'obs={obsid}']['scans'][int(spw)] = [int(spw_value) for spw_value in list(dic_scansforspws[spw])]
                     else:
                         raise ValueError(f"scans not found in {d[band].keys()}")
-
         return d
 
     def missing_antennas(self, band):
-        from casatools import table
         spws = self.bands_dict[band]['spws']
         _tsys = f"{self.vis}/SYSCAL"
         _ants = f"{self.vis}/ANTENNA"
 
-        tb_tsys, tb_ants = table(), table()
+        tb_tsys = ctable(_tsys, ack=False)
+        tb_ants = ctable(_ants, ack=False)
 
-        tb_tsys.open(_tsys)
-        tb_ants.open(_ants)
+        spws_str = ",".join(map(str, spws))
+        sub_tb_tsys = tb_tsys.query(f"SPECTRAL_WINDOW_ID IN [{spws_str}]")
 
+        ants = np.array(tb_ants.getcol('NAME'))
+        tsys_ants = np.array(sub_tb_tsys.getcol('ANTENNA_ID'))
 
-        tb_tsys.query(f"all(SPECTRAL_WINDOW_ID in {spws})")
-
-        ants = tb_ants.getcol('NAME')
-        tsys_ants = tb_tsys.getcol('ANTENNA_ID')
-
-        tb_tsys.close(), tb_ants.close()
+        sub_tb_tsys.close()
+        tb_tsys.close()
+        tb_ants.close()
 
         tsys_missing_ants = list(set(range(len(ants))) - set(tsys_ants))
         self.removable_antennas[band] = ants[tsys_missing_ants]

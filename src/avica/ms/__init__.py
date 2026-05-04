@@ -1,13 +1,6 @@
-from casatools import logsink
-
-avicalog=logsink('avica.casa_log')
-avicalog.setlogfile='avica.casa_log'
-avicalog.setglobal(True)
-
-from casatools import table
-from casatasks import fringefit, listobs, flagdata, mstransform
-from casatools import table
-from casatools import msmetadata
+# from casatasks import fringefit, listobs, flagdata, mstransform
+from avica.ms.compat import ctable, CasaMSMetadata as msmetadata
+from avica.ms.tables import get_tb_data
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -33,7 +26,6 @@ from avica.ms.mpiclient import start_mpi
 import traceback
 
 msmd=msmetadata()
-tb = table()
 
 SNR_THRES = 7.0
 
@@ -132,12 +124,10 @@ def read_df_vis_single(vis:str, tb_data, field_name, antenna_name, data_desc_spw
 
 def get_dic_an(vis, spw_col):
 
-    tban, tbfeed, tbdesc, tbvis = table(), table(), table(), table()
-
-    tbvis.open(vis)
-    tbdesc.open(f"{vis}/DATA_DESCRIPTION")
-    tbfeed.open(f"{vis}/FEED")
-    tban.open(f"{vis}/ANTENNA")
+    tbvis  = ctable(vis, ack=False)
+    tbdesc = ctable(f"{vis}/DATA_DESCRIPTION", ack=False)
+    tbfeed = ctable(f"{vis}/FEED", ack=False)
+    tban   = ctable(f"{vis}/ANTENNA", ack=False)
 
     anname = tban.getcol('NAME')
 
@@ -263,13 +253,11 @@ def add_spwid_totab(tb, spwid_missing, warnonly=True, dic_an_spw={}):
 def fix_feedid(vis, spw_col = 'SPECTRAL_WINDOW_ID', warnonly=True, verbose=True):
 
     fix_dic = {}
-    tbfeed, tbsys, tbgain, tbvis, tbdesc = table(), table(), table(),table(), table()
-
-    tbfeed.open(f"{vis}/FEED", nomodify=warnonly)
-    tbsys.open(f"{vis}/SYSCAL", nomodify=warnonly)
-    tbgain.open(f"{vis}/GAIN_CURVE", nomodify=warnonly)
-    tbvis.open(vis)
-    tbdesc.open(f"{vis}/DATA_DESCRIPTION")
+    tbfeed = ctable(f"{vis}/FEED", ack=False, readonly=warnonly)
+    tbsys  = ctable(f"{vis}/SYSCAL", ack=False, readonly=warnonly)
+    tbgain = ctable(f"{vis}/GAIN_CURVE", ack=False, readonly=warnonly)
+    tbvis  = ctable(vis, ack=False)
+    tbdesc = ctable(f"{vis}/DATA_DESCRIPTION", ack=False)
     descid = np.unique(tbvis.getcol('DATA_DESC_ID'))
 
     spwidsexpected = tbdesc.getcol(spw_col)[descid]
@@ -288,22 +276,20 @@ def fix_feedid(vis, spw_col = 'SPECTRAL_WINDOW_ID', warnonly=True, verbose=True)
                 if not warnonly:
                     tbchk.flush()
                     tbchk.close()
-                    tbchk.done()
     return fix_dic
 
-def get_tb_data(vis, axs=[]):
-    tb.open(vis)
-
-    available_cols = tb.colnames()
-    res = []
-    if len(axs):
-        for ax in axs:
-            if ax in available_cols:
-                res.append(tb.getcol(ax))
-            else:
-                raise NameError(f"{ax} is not a valid column, choose from {','.join(available_cols)}")
-    tb.close()
-    return res
+# def get_tb_data(vis, axs=[]):
+#     tb = ctable(vis, ack=False)
+#     available_cols = tb.colnames()
+#     res = []
+#     if len(axs):
+#         for ax in axs:
+#             if ax in available_cols:
+#                 res.append(tb.getcol(ax))
+#             else:
+#                 raise NameError(f"{ax} is not a valid column, choose from {','.join(available_cols)}")
+#     tb.close()
+#     return res
 
 def select_long_scans(field_id, fields, scan_df):
     """
@@ -322,8 +308,7 @@ def select_long_scans(field_id, fields, scan_df):
     return scans
 
 def vals_fromtab(caltable):
-    tb                      =   table()
-    tb.open(caltable)
+    tb                      =   ctable(caltable, ack=False)
     snr                     =   tb.getcol('SNR').ravel()
     an1                     =   tb.getcol('ANTENNA1').ravel()
     an2                     =   tb.getcol('ANTENNA2').ravel()
@@ -337,7 +322,6 @@ def vals_fromtab(caltable):
     return snr,an1,an2,time,scan,fid,flag
 
 def get_sci_ant(vis, tbls, target, msmd=None):
-    tb = table()
     msm                =   None
     field_id           =   None
     antid              =   []
@@ -352,8 +336,9 @@ def get_sci_ant(vis, tbls, target, msmd=None):
 
     if tbls:
         for tbl in tbls:
-            tb.open(tbl)
+            tb = ctable(tbl, ack=False)
             tbl_antid             =   tb.getcol('ANTENNA1')[np.where(tb.getcol('FIELD_ID')==field_id)]
+            tb.close()
             if not len(antid):antid =   tbl_antid
             antid                 =   np.intersect1d(antid, tbl_antid)
 
@@ -362,7 +347,6 @@ def get_sci_ant(vis, tbls, target, msmd=None):
     return ants, antid
 
 def get_calib_df_sorted_desc(vis, tbls, target, calibs, msmd=None, dic=False):
-    tb = table()
     calib_dic          =   {}
 #     calib_df           =   df(data=[], colum)
     msm                =   None
@@ -383,8 +367,9 @@ def get_calib_df_sorted_desc(vis, tbls, target, calibs, msmd=None, dic=False):
             calib_dic[field_id]['source'] = calib
             if tbls and field_id:
                 for tbl in tbls:
-                    tb.open(tbl)
+                    tb = ctable(tbl, ack=False)
                     tbl_antid             =   tb.getcol('ANTENNA1')[np.where(tb.getcol('FIELD_ID')==field_id)]
+                    tb.close()
                     if not len(antid):antid =   tbl_antid
                     antid                 =   np.intersect1d(antid, tbl_antid)
 
@@ -398,12 +383,12 @@ def get_calib_df_sorted_desc(vis, tbls, target, calibs, msmd=None, dic=False):
 
 def ants_intbls_unique(vis=None, msmd=None, tbls=None):
 
-    tb = table()
     antid, msm                =   [], None
     if tbls:
         for tbl in tbls:
-            tb.open(tbl)
+            tb = ctable(tbl, ack=False)
             tbl_antid             =   tb.getcol('ANTENNA1')
+            tb.close()
             if not len(antid):antid =   tbl_antid
             antid                 =   np.intersect1d(antid, tbl_antid)
     if not msmd:
@@ -415,193 +400,192 @@ def ants_intbls_unique(vis=None, msmd=None, tbls=None):
     if not msmd: msm.close()
     return ants, antid
 
-def fringefit_for_refant_fields(vis, caltable, fields, refants, sources, spws, gaintable, scan_df, mpi, target=''):
-    """"
-    TODO:
-    all_sci_avail_ants = check all the ants available on science
-    find good_calibrator = {
-        0. Calibrator with all sci_ants + above SNR_THRES
-        1. calibrators_list = such that: combination([calibrator_covering avail_ants]) == all_sci_avail_ants
-        1.1 : choose antennas still from the TSYS table.
-        2. the current approach of rating calibrator based on the first refant is bad, use refant such that all_sci_avail_ants are present.
-        3. The refant selection should be based on baseline i.e ANTENNA1-ANTENNA2 containing preferred refant
-    }
-    unflagged data from calibrator sources
+# def fringefit_for_refant_fields(vis, caltable, fields, refants, sources, spws, gaintable, scan_df, mpi, target=''):
+#     """"
+#     TODO:
+#     all_sci_avail_ants = check all the ants available on science
+#     find good_calibrator = {
+#         0. Calibrator with all sci_ants + above SNR_THRES
+#         1. calibrators_list = such that: combination([calibrator_covering avail_ants]) == all_sci_avail_ants
+#         1.1 : choose antennas still from the TSYS table.
+#         2. the current approach of rating calibrator based on the first refant is bad, use refant such that all_sci_avail_ants are present.
+#         3. The refant selection should be based on baseline i.e ANTENNA1-ANTENNA2 containing preferred refant
+#     }
+#     unflagged data from calibrator sources
 
 
-    NEW:
-    calibs + target == sources (input parameter)
-    """
-    print("..doing FFT")
-    tbl_names, status, err          =   [], True, ''
+#     NEW:
+#     calibs + target == sources (input parameter)
+#     """
+#     print("..doing FFT")
+#     tbl_names, status, err          =   [], True, ''
 
-    msmd.open(vis)
-    MPICLIENT                       =   start_mpi()
-    success                         =   False
-    ants_with_solution, anid        =   ants_intbls_unique(msmd=msmd, tbls=gaintable)
-    refants                         =   np.intersect1d(ants_with_solution, refants)
-    d_fields                        =   {}
+#     msmd.open(vis)
+#     MPICLIENT                       =   start_mpi()
+#     success                         =   False
+#     ants_with_solution, anid        =   ants_intbls_unique(msmd=msmd, tbls=gaintable)
+#     refants                         =   np.intersect1d(ants_with_solution, refants)
+#     d_fields                        =   {}
 
-    if target:
-        all_sci_ant, ant_id         =   get_sci_ant(vis, gaintable, target, msmd=msmd)
-        calibrator_df_sorted_desc   =   get_calib_df_sorted_desc(vis, gaintable, target, calibs=sources, msmd=msmd)
-        sel_calibrator, remain_ant  =   choose_calib_for_snr_rating(all_sci_ant, calibrator_df_sorted_desc, n_ant=9)
+#     if target:
+#         all_sci_ant, ant_id         =   get_sci_ant(vis, gaintable, target, msmd=msmd)
+#         calibrator_df_sorted_desc   =   get_calib_df_sorted_desc(vis, gaintable, target, calibs=sources, msmd=msmd)
+#         sel_calibrator, remain_ant  =   choose_calib_for_snr_rating(all_sci_ant, calibrator_df_sorted_desc, n_ant=9)
 
-        sources                         =   sel_calibrator + [target]
-        if remain_ant:
-            print(f"{c['r']}{remain_ant} was not found in any Calibrator Sources:{c['x']} {sel_calibrator}")
+#         sources                         =   sel_calibrator + [target]
+#         if remain_ant:
+#             print(f"{c['r']}{remain_ant} was not found in any Calibrator Sources:{c['x']} {sel_calibrator}")
 
-    try:
-        for refant in refants:
-            for fid in fields:
-                field_name  = fields[fid]['name']
-                scans = select_long_scans(fid, fields, scan_df)
+#     try:
+#         for refant in refants:
+#             for fid in fields:
+#                 field_name  = fields[fid]['name']
+#                 scans = select_long_scans(fid, fields, scan_df)
 
-                nscans, usescans = 0, []
-                for scan in scans:
-                    antennasforscan = list(msmd.antennasforscan(int(scan)))
-                    antid           = msmd.antennaids(refant)[0]
+#                 nscans, usescans = 0, []
+#                 for scan in scans:
+#                     antennasforscan = list(msmd.antennasforscan(int(scan)))
+#                     antid           = msmd.antennaids(refant)[0]
 
-                    if antid in antennasforscan:
-                        nscans+=1
-                        usescans.append(scan)
-                    else:
-                        print(f'scan {scan} not available in antenna {refant}')
-                        scans.remove(scan)
-                    if nscans>=5: break
-                scannos                    =   ",".join(usescans)
-
-
-                res, e      = [], ''
-                ff_caltable = f"{str(Path(caltable).absolute() / Path(caltable).name)}_{refant}__{field_name}.t"
-                gt = [str(Path(gaintabl).absolute()) for gaintabl in gaintable]
-                try:
-                    if sources and (not field_name in sources):
-                        e = f"skipping {field_name} not selected"
-                    elif not len(usescans)<1:
-                        e = "not enough scans"
-
-                        if not mpi:
-                            fringefit(
-                                vis=vis,
-                                caltable=f"{ff_caltable}",
-                                field=f'{fid}',
-                                selectdata=True,
-                                scan=scannos,
-                                solint='inf', zerorates=True,
-                                refant=refant, minsnr=3,
-                                gaintable=gt,
-                                interp=['nearest,nearest'],
-                                globalsolve=False,
-                                docallib=False,
-                                parang=False,
-                            )
-                            success = True
-                        else:
-                            # print(refants, ants_with_solution, anid)
-                            # print(fid, refant, scannos)
-                            if MPICLIENT:
-                                ms_name_fp      = vis#_inp_params.workdir + _inp_params.ms_name
-                                caltable_fp     = ff_caltable#_inp_params.workdir + caltable
-                                gaintable_fp    = gt#[_inp_params.workdir + gt for gt in gaintable]
-
-                                spw             =   spws #','.join([str(spw) for spw in spws])
-                                corrcomb        =   'none'
-                                combine         =   ''
-                                # interp          =   'nearest'
-                                gainfield = []
-                                fringefit_cmd = ("""fringefit(vis='{0}',""".format(ms_name_fp)
-                                                + """caltable='{0}',""".format(caltable_fp)
-                                                + """field='{0}',""".format(str(fid))
-                                                + """spw='{0}',""".format(spw)
-                                                + """selectdata={0},""".format('True')
-                                                + """timerange='{0}',""".format('')
-                                                + """antenna='{0}',""".format(str(",".join(ants_with_solution)))
-                                                + """scan='{0}',""".format(str(scannos))
-                                                + """observation='{0}',""".format('')
-                                                + """msselect='{0}',""".format('')
-                                                + """solint='inf',"""
-                                                + """combine='{0}',""".format(str(combine))
-                                                + """refant='{0}',""".format(str(refant))
-                                                + """minsnr={0},""".format(str(3))
-                                                + """zerorates={0},""".format('False')
-                                                + """globalsolve={0},""".format('False')
-                        #                         + """weightfactor={0},""".format(str(weightfactor))
-                                                # + """delaywindow={0},""".format(str(list(delaywindow)))
-                                                # + """ratewindow={0},""".format(str(list(ratewindow)))
-                                                # + """niter={0},""".format(str(_inp_params.fringe_maxiter_lsquares))
-                                                # + """append={0},""".format(str(append))
-                                                + """docallib={0},""".format('False')
-                                                + """callib='{0}',""".format('')
-                                                + """gaintable={0},""".format(str(gaintable_fp))
-                                                + """gainfield={0},""".format(str(gainfield))
-                                                # + """interp='{0}',""".format(str(interp))
-                                                # + """spwmap={0},""".format(str(spwmap))
-                                                + """corrdepflags={0},""".format('False')
-                                                # + """paramactive={0},""".format(str(list(paramactive)))
-                                                + """concatspws={0},""".format('True')
-                                                + """corrcomb='{0}',""".format(str(corrcomb))
-                                                + """parang={0}""".format('True')
-                                                + """)"""
-                                                )
-                                # print(fringefit_cmd)
-                                res = MPICLIENT.push_command_request(fringefit_cmd, block=False)
-                                print(f'processing {refant} with scans {str(scannos)}')
-                                # res_list.extend(res)
-                                # success = res[0]['successful']
-                                # print(res)
-                                # e = res[0]['']
-                    else:
-                         success = False
-
-                except Exception as e:
-                    success = False
-                finally:
-                    d_fields[f"{fid}___{refant}"] =  {'scannos': scannos, 'mpi_ids': res, 'e':e, 'tbl_names': ff_caltable}
+#                     if antid in antennasforscan:
+#                         nscans+=1
+#                         usescans.append(scan)
+#                     else:
+#                         print(f'scan {scan} not available in antenna {refant}')
+#                         scans.remove(scan)
+#                     if nscans>=5: break
+#                 scannos                    =   ",".join(usescans)
 
 
-    except Exception as e:
-        status, err =False, e
-    finally:
-        msmd.done()
-        if not status: raise SystemExit(f"{c['r']}Failed! {c['y']}{str(err)}{c['x']}")
-    # ret =
-    # # print(ret)
-    for k,v in d_fields.items():
-        success = False
-        if len(v['mpi_ids']):
-            res         =   MPICLIENT.get_command_response(v['mpi_ids'], block=True)
-            success     =   res[0]['successful']
-            if not success:
-                # print('Errfinding traceback')
-                e           =   res[0]['traceback']
-        else:
-            success     =   False
-            e           =   v['e']
+#                 res, e      = [], ''
+#                 ff_caltable = f"{str(Path(caltable).absolute() / Path(caltable).name)}_{refant}__{field_name}.t"
+#                 gt = [str(Path(gaintabl).absolute()) for gaintabl in gaintable]
+#                 try:
+#                     if sources and (not field_name in sources):
+#                         e = f"skipping {field_name} not selected"
+#                     elif not len(usescans)<1:
+#                         e = "not enough scans"
 
-        fid, refant     =   k.split('___')
-        field_name      =   fields[fid]['name']
-        scannos         =   v['scannos']
-        if not success:
-            print(f'{c["r"]}processing failed{c["x"]}', scannos,'for field', field_name, 'with refant', refant, f"\nreason : {e}\n")
-        else:
-            if Path(v['tbl_names']).exists():
-                print(f'{c["g"]}processed{c["x"]}', scannos,'for field', field_name, 'with refant', refant)
-                tbl_names.append(v['tbl_names'])
-            else:
-                err_flag = f"Successful fringefit execution but table not found"
-                d_fields[f"{fid}___{refant}"]['err_flag'] = err_flag
-                print(f'{c["r"]}processing failed{c["x"]}', scannos,'for field', field_name, 'with refant', refant, f"\nreason : {err_flag}\n")
+#                         if not mpi:
+#                             fringefit(
+#                                 vis=vis,
+#                                 caltable=f"{ff_caltable}",
+#                                 field=f'{fid}',
+#                                 selectdata=True,
+#                                 scan=scannos,
+#                                 solint='inf', zerorates=True,
+#                                 refant=refant, minsnr=3,
+#                                 gaintable=gt,
+#                                 interp=['nearest,nearest'],
+#                                 globalsolve=False,
+#                                 docallib=False,
+#                                 parang=False,
+#                             )
+#                             success = True
+#                         else:
+#                             # print(refants, ants_with_solution, anid)
+#                             # print(fid, refant, scannos)
+#                             if MPICLIENT:
+#                                 ms_name_fp      = vis#_inp_params.workdir + _inp_params.ms_name
+#                                 caltable_fp     = ff_caltable#_inp_params.workdir + caltable
+#                                 gaintable_fp    = gt#[_inp_params.workdir + gt for gt in gaintable]
 
-    tbl_metafile = f"{str(Path(caltable).absolute() / Path(caltable).name)}.avica"
-    save_metafile(metafile=tbl_metafile, metad=d_fields)
-    return tbl_names
+#                                 spw             =   spws #','.join([str(spw) for spw in spws])
+#                                 corrcomb        =   'none'
+#                                 combine         =   ''
+#                                 # interp          =   'nearest'
+#                                 gainfield = []
+#                                 fringefit_cmd = ("""fringefit(vis='{0}',""".format(ms_name_fp)
+#                                                 + """caltable='{0}',""".format(caltable_fp)
+#                                                 + """field='{0}',""".format(str(fid))
+#                                                 + """spw='{0}',""".format(spw)
+#                                                 + """selectdata={0},""".format('True')
+#                                                 + """timerange='{0}',""".format('')
+#                                                 + """antenna='{0}',""".format(str(",".join(ants_with_solution)))
+#                                                 + """scan='{0}',""".format(str(scannos))
+#                                                 + """observation='{0}',""".format('')
+#                                                 + """msselect='{0}',""".format('')
+#                                                 + """solint='inf',"""
+#                                                 + """combine='{0}',""".format(str(combine))
+#                                                 + """refant='{0}',""".format(str(refant))
+#                                                 + """minsnr={0},""".format(str(3))
+#                                                 + """zerorates={0},""".format('False')
+#                                                 + """globalsolve={0},""".format('False')
+#                         #                         + """weightfactor={0},""".format(str(weightfactor))
+#                                                 # + """delaywindow={0},""".format(str(list(delaywindow)))
+#                                                 # + """ratewindow={0},""".format(str(list(ratewindow)))
+#                                                 # + """niter={0},""".format(str(_inp_params.fringe_maxiter_lsquares))
+#                                                 # + """append={0},""".format(str(append))
+#                                                 + """docallib={0},""".format('False')
+#                                                 + """callib='{0}',""".format('')
+#                                                 + """gaintable={0},""".format(str(gaintable_fp))
+#                                                 + """gainfield={0},""".format(str(gainfield))
+#                                                 # + """interp='{0}',""".format(str(interp))
+#                                                 # + """spwmap={0},""".format(str(spwmap))
+#                                                 + """corrdepflags={0},""".format('False')
+#                                                 # + """paramactive={0},""".format(str(list(paramactive)))
+#                                                 + """concatspws={0},""".format('True')
+#                                                 + """corrcomb='{0}',""".format(str(corrcomb))
+#                                                 + """parang={0}""".format('True')
+#                                                 + """)"""
+#                                                 )
+#                                 # print(fringefit_cmd)
+#                                 res = MPICLIENT.push_command_request(fringefit_cmd, block=False)
+#                                 print(f'processing {refant} with scans {str(scannos)}')
+#                                 # res_list.extend(res)
+#                                 # success = res[0]['successful']
+#                                 # print(res)
+#                                 # e = res[0]['']
+#                     else:
+#                          success = False
+
+#                 except Exception as e:
+#                     success = False
+#                 finally:
+#                     d_fields[f"{fid}___{refant}"] =  {'scannos': scannos, 'mpi_ids': res, 'e':e, 'tbl_names': ff_caltable}
+
+
+#     except Exception as e:
+#         status, err =False, e
+#     finally:
+#         msmd.done()
+#         if not status: raise SystemExit(f"{c['r']}Failed! {c['y']}{str(err)}{c['x']}")
+#     # ret =
+#     # # print(ret)
+#     for k,v in d_fields.items():
+#         success = False
+#         if len(v['mpi_ids']):
+#             res         =   MPICLIENT.get_command_response(v['mpi_ids'], block=True)
+#             success     =   res[0]['successful']
+#             if not success:
+#                 # print('Errfinding traceback')
+#                 e           =   res[0]['traceback']
+#         else:
+#             success     =   False
+#             e           =   v['e']
+
+#         fid, refant     =   k.split('___')
+#         field_name      =   fields[fid]['name']
+#         scannos         =   v['scannos']
+#         if not success:
+#             print(f'{c["r"]}processing failed{c["x"]}', scannos,'for field', field_name, 'with refant', refant, f"\nreason : {e}\n")
+#         else:
+#             if Path(v['tbl_names']).exists():
+#                 print(f'{c["g"]}processed{c["x"]}', scannos,'for field', field_name, 'with refant', refant)
+#                 tbl_names.append(v['tbl_names'])
+#             else:
+#                 err_flag = f"Successful fringefit execution but table not found"
+#                 d_fields[f"{fid}___{refant}"]['err_flag'] = err_flag
+#                 print(f'{c["r"]}processing failed{c["x"]}', scannos,'for field', field_name, 'with refant', refant, f"\nreason : {err_flag}\n")
+
+#     tbl_metafile = f"{str(Path(caltable).absolute() / Path(caltable).name)}.avica"
+#     save_metafile(metafile=tbl_metafile, metad=d_fields)
+#     return tbl_names
 
 def generic_df_fromtab(tbl, colnames=[]):
 
     tbl_tuple = []
-    tb=table()
-    tb.open(tbl)
+    tb = ctable(tbl, ack=False)
     for colname in tb.colnames():
         try:
             tbl_d = tb.getcol(str(colname))
@@ -648,10 +632,8 @@ def df_fromtb(vis, tbls, msmd):
 
     CASA uses "ANTENNA2" as the reference antenna used for the table.
     """
-    tb_ant = table()
-    tb_tsys = table()
-    tb_ant.open(f'{vis}/ANTENNA')
-    tb_tsys.open(f"{vis}/SYSCAL")
+    tb_ant  = ctable(f'{vis}/ANTENNA', ack=False)
+    tb_tsys = ctable(f"{vis}/SYSCAL", ack=False)
 
     an_dict = {}
 
@@ -681,7 +663,7 @@ def df_fromtb(vis, tbls, msmd):
         an_dict[i_anid]['d']=np.nanmedian(d)   # Median distance of all ants for one refant
 
     tbd = df_fromtables(tbls)
-    tb_ant.done()
+    tb_ant.close()
 
 
     i,j=0,0
@@ -705,14 +687,14 @@ def df_fromtb(vis, tbls, msmd):
                 new_df       = df(tb_data,
                                  columns=["ANTENNA2", "ANNAME", "SNR_median", "SNR_mean", "SNR_max", "FIELD_ID", "SNR_FIELD", "d", "STD_TSYS"])
                 df_field_ant = pdconc([df_field_ant, new_df], ignore_index=True)
-    tb_ant.done()
+    tb_ant.close()
     return df_field_ant
 
-def flagsummary(vis, **kwargs):
-      d=  flagdata(vis, mode='summary',
-                #  name=self.name,
-                 fieldcnt=True, basecnt=True, **kwargs, )
-      return d
+# def flagsummary(vis, **kwargs):
+#       d=  flagdata(vis, mode='summary',
+#                 #  name=self.name,
+#                  fieldcnt=True, basecnt=True, **kwargs, )
+#       return d
 
 def splitms_mpi(vis, outvis, fids):
 
@@ -723,63 +705,63 @@ def splitms_mpi(vis, outvis, fids):
 
     return res
 
-def listobs_mpi(vis, overwrite, listfile, verbose):
-    MPICLIENT = start_mpi()
-    listobs_cmd = (f"listobs(vis='{vis}', overwrite={overwrite}, listfile='{listfile}',verbose={verbose})")
-    res = MPICLIENT.push_command_request(listobs_cmd, block=True)
-    return res[0]['ret']
+# def listobs_mpi(vis, overwrite, listfile, verbose):
+#     MPICLIENT = start_mpi()
+#     listobs_cmd = (f"listobs(vis='{vis}', overwrite={overwrite}, listfile='{listfile}',verbose={verbose})")
+#     res = MPICLIENT.push_command_request(listobs_cmd, block=True)
+#     return res[0]['ret']
 
-def load_metadata(vis, metafile, refants=None, spws=None, sources=None, determine=False, mpi=False):
-    """_summary_
+# def load_metadata(vis, metafile, refants=None, spws=None, sources=None, determine=False, mpi=False):
+#     """_summary_
 
-    TODO: use msmd or ms casatools
+#     TODO: use msmd or ms casatools
 
-    Args:
-        vis (_str_): _name of the visibility file_
-        metafile (_str_): _path of the metafile_
-        refants (_list_, optional): _list of Antenna names for refants_. Defaults to None.
-        spws (_list_, optional): _spectral window ids_. Defaults to None.
-        sources (_list_, optional): _field names_. Defaults to None.
-        determine (bool, optional): _whether to determine the metadata or load the older one if found_. Defaults to False.
-        mpi (bool, optional): _use of MPI_. Defaults to False.
+#     Args:
+#         vis (_str_): _name of the visibility file_
+#         metafile (_str_): _path of the metafile_
+#         refants (_list_, optional): _list of Antenna names for refants_. Defaults to None.
+#         spws (_list_, optional): _spectral window ids_. Defaults to None.
+#         sources (_list_, optional): _field names_. Defaults to None.
+#         determine (bool, optional): _whether to determine the metadata or load the older one if found_. Defaults to False.
+#         mpi (bool, optional): _use of MPI_. Defaults to False.
 
-    Returns:
-        _dict_: _dictionary of metadata_
-    """
-    if (not Path(metafile).exists()) or determine:
-        if not sources: sources = []
+#     Returns:
+#         _dict_: _dictionary of metadata_
+#     """
+#     if (not Path(metafile).exists()) or determine:
+#         if not sources: sources = []
 
-        if not mpi:
-            meta=listobs(vis=vis, overwrite=True, listfile=f'{str(Path(metafile).parent / "listobs.txt")}',verbose=False)
-        else:
+#         if not mpi:
+#             meta=listobs(vis=vis, overwrite=True, listfile=f'{str(Path(metafile).parent / "listobs.txt")}',verbose=False)
+#         else:
 
-            meta=listobs_mpi(vis, overwrite=True, listfile=f'{str(Path(metafile).parent / "listobs.txt")}',verbose=False)
+#             meta=listobs_mpi(vis, overwrite=True, listfile=f'{str(Path(metafile).parent / "listobs.txt")}',verbose=False)
 
-        print("loaded listobs..")
-        fields = {}
-        for k,v in meta.items():
-            if ('field_' in k):
-                if sources and v['name'] in sources:
-                    fields[k.replace('field_', '')]      =    {'name':v['name']}
-                elif not sources:
-                    fields[k.replace('field_', '')]      =    {'name':v['name']}
+#         print("loaded listobs..")
+#         fields = {}
+#         for k,v in meta.items():
+#             if ('field_' in k):
+#                 if sources and v['name'] in sources:
+#                     fields[k.replace('field_', '')]      =    {'name':v['name']}
+#                 elif not sources:
+#                     fields[k.replace('field_', '')]      =    {'name':v['name']}
 
-        # fields                          =   {k.replace('field_', ''):{'name':v['name']} for k,v in meta.items() if ('field_' in k)}
-        scans                           =   {k.replace('scan_', ''):{'t0':v['0']['BeginTime'],'t1':v['0']['EndTime']} for k,v in meta.items() if 'scan_' in k}
-        for fk in fields:
-            fields[str(fk)]['scans']    =   [k.replace('scan_', '') for k,v in meta.items() if ('scan_' in k) and (v['0']['FieldId']==int(fk))]
-        # fs                 =   flagsummary(vis)
-        meta={'fields': fields, 'scans': scans,}
-        if spws: meta['spws'] = spws
-        save_metafile(metafile, meta)
-    else:
-        with open(metafile, 'r') as sf:
-            metad                       =   sf.read()
-            meta                        =   json.loads(metad)
-    if refants: meta['refants'] =   refants
-    if sources: meta['sources'] =   sources
-    if spws:    meta['spws'] = spws
-    return meta
+#         # fields                          =   {k.replace('field_', ''):{'name':v['name']} for k,v in meta.items() if ('field_' in k)}
+#         scans                           =   {k.replace('scan_', ''):{'t0':v['0']['BeginTime'],'t1':v['0']['EndTime']} for k,v in meta.items() if 'scan_' in k}
+#         for fk in fields:
+#             fields[str(fk)]['scans']    =   [k.replace('scan_', '') for k,v in meta.items() if ('scan_' in k) and (v['0']['FieldId']==int(fk))]
+#         # fs                 =   flagsummary(vis)
+#         meta={'fields': fields, 'scans': scans,}
+#         if spws: meta['spws'] = spws
+#         save_metafile(metafile, meta)
+#     else:
+#         with open(metafile, 'r') as sf:
+#             metad                       =   sf.read()
+#             meta                        =   json.loads(metad)
+#     if refants: meta['refants'] =   refants
+#     if sources: meta['sources'] =   sources
+#     if spws:    meta['spws'] = spws
+#     return meta
 
 
 def ff_to_tbl_names(vis, meta, metafile, refants=None, sources=None, spws=None, target='', gaintable=None, new_tbls=False, mpi=False):
@@ -947,7 +929,7 @@ def get_sourcenames(msmd):
         if len(msmd.spwsforfield(sid)):
             sourcenames[sid]=msmd.namesforfields(sid)[0]
         else:
-            warn_msg = f"{c['y']}{msmd.namesforfields(sid)[0]} has {len(msmd.spwsforfield(sid))} spws present{c['x']}"
+            warn_msg = f"{c['y']}{msmd.namesforfields(sid)[0]} has no spws present{c['x']}"
             sourcenames[sid]=msmd.namesforfields(sid)[0]
     if warn_msg: print(warn_msg)
     return sourcenames
@@ -967,11 +949,12 @@ def coordinate_for_sources(vis, sourcenames):
                     scalar tuple in radians
     """
     c = {}
-    tb.open(f"{vis}/FIELD")
-    ra,dec = tb.getcol('REFERENCE_DIR')
+    tb = ctable(f"{vis}/FIELD", readonly=True, ack=False)
+
+    ra,dec = tb.getcol('REFERENCE_DIR').T
     for i,s in enumerate(tb.getcol('NAME')):
         if s in sourcenames.values():
-            c[s]=(ra[0][i], dec[0][i])
+            c[str(s)]=(ra[0][i], dec[0][i])
     tb.done()
     return c
 
@@ -1117,7 +1100,7 @@ def identify_sources_fromsnr_ms(vis, target_source, caliblist_file=None, snr_met
     return sd
 
 def get_antenna_name(vis):
-    tb.open(f"{vis}/OBSERVATION")
+    tb = ctable(f"{vis}/OBSERVATION", readonly=True, ack=False)
     telescope_names = tb.getcol('TELESCOPE_NAME')
     tb.close()
     return str(telescope_names[0])
@@ -1127,7 +1110,7 @@ def has_table(vis, *tbl):
     return table_found
 
 def get_reffreq(vis):
-    tb.open(f"{vis}/SPECTRAL_WINDOW")
+    tb = ctable(f"{vis}/SPECTRAL_WINDOW", readonly=True, ack=False)
 
     reffreq = float(np.mean(tb.getcol("REF_FREQUENCY")))
     tb.close()
@@ -1135,30 +1118,30 @@ def get_reffreq(vis):
 
 # ----------------------------------------------------------------
 
-def split_ms(vis, outvis, source_list=[], fids=[], mpi=False):
+# def split_ms(vis, outvis, source_list=[], fids=[], mpi=False):
 
-    if not fids:
-        fids=[]
-        if not source_list: raise TypeError(f"source_list is required")
-        try:
-            msmd.open(vis)
-            for f in source_list:
-                fid = msmd.fieldsforname(str(f))[0]
-                fids.append(str(fid))
-        except Exception as e:
-            # closed = msmd.done()
-            print(str(e))
-        finally:
-            msmd.done()
+#     if not fids:
+#         fids=[]
+#         if not source_list: raise TypeError(f"source_list is required")
+#         try:
+#             msmd.open(vis)
+#             for f in source_list:
+#                 fid = msmd.fieldsforname(str(f))[0]
+#                 fids.append(str(fid))
+#         except Exception as e:
+#             # closed = msmd.done()
+#             print(str(e))
+#         finally:
+#             msmd.done()
 
-    fids=','.join(fids)
+#     fids=','.join(fids)
 
-    if mpi:
-        ret = splitms_mpi(vis, outvis, fids)
-    else:
-        ret =   mstransform(vis=f'{vis}', outputvis=f'{outvis}', datacolumn='data', field=f'{fids}', createmms=True)
-    # res         = MPICLIENT.push_command_request(mstransform_cmd, block=True)
-    return ret
+#     if mpi:
+#         ret = splitms_mpi(vis, outvis, fids)
+#     else:
+#         ret =   mstransform(vis=f'{vis}', outputvis=f'{outvis}', datacolumn='data', field=f'{fids}', createmms=True)
+#     # res         = MPICLIENT.push_command_request(mstransform_cmd, block=True)
+#     return ret
 
 # ---------- Diagnostics -----------
 
@@ -1237,7 +1220,7 @@ def split_ms(vis, outvis, source_list=[], fids=[], mpi=False):
 #     return dfs
 
 def get_axes(vis):
-    tb.open(vis)
+    tb = ctable(f"{vis}", readonly=True, ack=False)
 
     time = tb.getcol('TIME')/(3600*24)
     time = Time(time, format='mjd')
@@ -1378,7 +1361,7 @@ def get_fid(vis, target):
 
 #     print(sum(flaggable_idx), "flaggable visibility")
 #     if flag:
-#         tb = table()
+#         tb = ctable()
 #         tb.open(vis, nomodify=False)
 
 #         size =  df_vis.index.max() + 1
@@ -1468,7 +1451,6 @@ def find_phasecenter_inms(fitsfile, vis, class_searchcoord_file, sep=0.85 ):
     df_class_compare = df_class_compare.query(f'sep_arcsec >= {sep}')[['fits_target', 'coordinate', 'sid', 'sep_arcsec']]
 
     if not df_class_compare.empty:
-        from avica.ms import get_tb_data
         [field_name]               = get_tb_data(f"{vis}/FIELD", axs=['NAME'])
 
         field_name = [str(fn) for fn in field_name]
@@ -1503,10 +1485,8 @@ def get_alluniquecomb_spws(vis):
     """
     when there are similar band for multiple spws
     """
-    tbfo = table()
-
-    tbfo.open(f'{vis}/SPECTRAL_WINDOW')
-    freqs = tbfo.getcol('CHAN_FREQ')
+    tbfo = ctable(f'{vis}/SPECTRAL_WINDOW', readonly=True, ack=False)
+    freqs = tbfo.getcol('CHAN_FREQ').T
     tbfo.close()
     spws_freq_list = freqs.mean(axis=0)
     unique_freqs_cen = np.unique(spws_freq_list)
@@ -1525,7 +1505,6 @@ def get_best_spws(vis):
     countscans = 0
     countants = 0
     spwscomb = get_alluniquecomb_spws(vis)
-
     msmd = msmetadata()
 
     msmd.open(vis)

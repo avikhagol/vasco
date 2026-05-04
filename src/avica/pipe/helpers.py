@@ -1340,8 +1340,8 @@ def count_freqids(fitsfile):
 
 
 def check_target_in_ms(vis, target):
-    from casatools import msmetadata
-    msmd = msmetadata()
+    from avica.ms.compat import CasaMSMetadata
+    msmd = CasaMSMetadata()
     found = False
 
     if Path(vis).exists():

@@ -5,7 +5,8 @@ from avica.ms.mpiclient import get_mpi_client
 from avica.ms.tables import an_dic, get_ant_scans, get_name_dict, get_tb_data
 from avica.config import Config, CONFIG_MAPPING
 
-from casatools import table, logsink
+# from casatools import table, logsink
+from avica.ms.compat import ctable
 import polars as pl
 import numpy as np
 
@@ -16,9 +17,9 @@ from pathlib import Path
 
 SNR_CLIP_DEFAULT = 600
 
-avicalog=logsink('avica.casa_log')
-avicalog.setlogfile='avica.casa_log'
-avicalog.setglobal(True)
+# avicalog=logsink('avica.casa_log')
+# avicalog.setlogfile='avica.casa_log'
+# avicalog.setglobal(True)
 
 
 class ObservationInp(Config):
@@ -92,7 +93,7 @@ class FringeDetectionRating:
         self.calibrators            =   {}
         self.snr_dict_forsources    =   {}
 
-        self.mpiclient              =   get_mpi_client()
+        # self.mpiclient              =   get_mpi_client()
 
         self.obs                    =   ObservationInp()
         self.arr                    =   ArrayInp()
@@ -500,8 +501,7 @@ def get_scan_durations(vis:str, sids:List[int]):
     Returns:
         dict: dictionary containing scan duration. {scan_id:scan_duration}
     """
-    tb = table()
-    tb.open(vis)
+    tb = ctable(vis, ack=False, readonly=True)
     subtb = tb.query(columns="DISTINCT SCAN_NUMBER,TIME", query=f'SCAN_NUMBER in {sids}')
     time = subtb.getcol('TIME')
     scans = subtb.getcol('SCAN_NUMBER')

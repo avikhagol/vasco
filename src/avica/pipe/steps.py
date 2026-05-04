@@ -553,10 +553,8 @@ class AverageMS(PipelineStepBase):
 
                 timebin             =   "2s"
                 mpi_cores           =   15
-
                 bandms              =   BandInfoMS(vis, min_expt, verbose=verbose)
                 bands_in_wd_ifolder =   list(bandms.bands_dict.keys())
-
                 for band in bands_in_wd_ifolder:
                     if band in band_counts:
                         band_counts[band]       +=  1

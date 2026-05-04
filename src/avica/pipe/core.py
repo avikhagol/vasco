@@ -1060,7 +1060,7 @@ class AvicaPipelineCore:
                         result      = step.run(**pipe_kwargs)
 
                         PipelineContext.validation_success  = any(result.success)
-                        if pipe_kwargs.get('lf') is not None:              # ← here
+                        if pipe_kwargs.get('lf') is not None:
                             PipelineContext.params['lf'] = pipe_kwargs.get('lf')
 
                         PipelineContext.result              = result
