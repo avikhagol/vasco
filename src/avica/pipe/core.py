@@ -284,7 +284,7 @@ def split_in_freqid(fitsfiles, verbose=False):
                     print(f"\nsplitting... FREQID=={freqid}")
 
                 sp      =   SplitData(inpfits=fitsfile, outfits=newfitsfile, verbose=verbose)
-                sp.split(source_ids=None, freqids=freqid)
+                sp.split(source_ids=None, freqids=[freqid])
 
                 split_result[fitsfile].append(newfitsfile)
                 if fitsfile in workingfits:
