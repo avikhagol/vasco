@@ -7,7 +7,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "avica"
-version = "0.3.1.1"
+version = "0.3.1.2"
 description = "AVICA: Automated VLBI pipeline in CASA"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -28,14 +28,14 @@ classifiers = [
 
 dependencies = [
   "astropy",
-  "numpy",
+  "numpy<1.25.0",
   "ipython",
   "pandas",
   "scipy",
-  "scikit-learn",
   "polars",
   "protobuf==3.20.3",
   "typer",
+  "python-casacore",
   "importlib_resources>=5.0; python_version < '3.9'",
 ]
 
@@ -54,7 +54,6 @@ test = ["pytest"]
 
 [project.scripts]
 avica = "avica:cli_new"
-fitsidiutil = "avica.fitsidiutil.cli:fitsidiutil_cli"
 
 [tool.scikit-build]
 cmake.build-type = "Release"
