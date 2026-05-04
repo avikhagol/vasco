@@ -907,7 +907,7 @@ def find_url_tsys(fitsfile, proj=''):
     return urls
 
 
-def del_fl(wd:str, count:int=0, fl:str='*ms*', rm:bool=False):
+def del_fl(wd:str | Path, count:int=0, fl:str='*ms*', rm:bool=False):
     """delete files from the input folder
 
     Args:
@@ -1301,7 +1301,7 @@ def meta_from_fitsfile(fitsfile, target, wd_ifolder, metafolder, reference_ifold
 
 
 
-def meta_from_fitsfile_freqid(fitsfiles, wd_ifolder, metafolder, do_manual_selection):
+def meta_from_fitsfile_freqid(fitsfiles, target, wd_ifolder, metafolder, reference_ifolder, do_manual_selection):
     """
     assumes wd_ifolder exists
     """
@@ -1317,15 +1317,12 @@ def meta_from_fitsfile_freqid(fitsfiles, wd_ifolder, metafolder, do_manual_selec
             del_fl(wd_ifolder_freqid, 0, "observation.inp", rm=True)
             create_config(params_freqid, f"{wd_ifolder_freqid}/observation.inp")
 
-            meta_from_fitsfile(ff, wd_ifolder_freqid, metafolder, do_manual_selection)
+            meta_from_fitsfile(ff, target, wd_ifolder_freqid, metafolder, reference_ifolder, do_manual_selection=do_manual_selection)
             freqid  +=  1
 
 
 def count_freqids(fitsfile):
-    from avica.fitsidiutil.io import FITSIDI
-
     hdul = read_idi(fitsfile)
-
     FREQID_CHK_HDUNAME = ['FREQUENCY', 'ANTENNA', 'GAIN_CURVE', 'SYSTEM_TEMPERATURE', 'SOURCE']
     freqids                     =   1
 

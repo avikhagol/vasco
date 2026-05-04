@@ -12,6 +12,8 @@ from avica.fitsidiutil.op import get_colname, dict_baseline
 from avica.fitsidiutil.obs import ListObs
 from avica.fitsidiutil.split import SplitData
 from avica.sources import check_band
+from avica.util import make_art
+
 
 from copy import deepcopy
 
@@ -369,7 +371,7 @@ class StepResult:
 
     desc                :   List[str]     =   field(default_factory=list)
     success             :   List[bool]     =   field(default_factory=list)
-    end_stamp           :   datetime = datetime.now()
+    end_stamp: datetime = field(default_factory=datetime.now)
 
 class ColName(NamedTuple):
     working_col     :   str
@@ -893,13 +895,6 @@ class UpdateSheet(PipelineStepValidatorBase):
         print("Failed Cells\t:", failed)
         return PipelineStepValidatorResult(success=[PipelineContext.validation_success], msg="")
 
-def _art(title: str) -> str:
-    return ( f"\n"
-        f"    ╔══════════════════════════════════════════════════════════════════╗\n"
-        f"    ║{title.upper():^66}║\n"
-        f"    ╚══════════════════════════════════════════════════════════════════╝\n"
-    )
-
 class AvicaPipelineCore:
 
     def __init__(self, pipe_params, steps):
@@ -984,6 +979,7 @@ class AvicaPipelineCore:
                 datefmt="%Y-%m-%d %H:%M:%S"
             ))
             log.addHandler(fh)
+            log.propagate = False
         # PipelineContext.params = DEFAULT_PARAMS
 
         PipelineContext.params.clear()
@@ -991,7 +987,7 @@ class AvicaPipelineCore:
         PipelineContext.params['init_params'] = self.pipe_params
 
         # ~~~~~~~~~~~ cli messages ~~~~~~~~~~~~~~~~~~~~~~~~~~
-        print(_art("avica pipeline"))
+        make_art()
         print("Following steps will be executed in the sequence:")
         print(f"  {BC} - " + "\n   - ".join(self._steps.keys()) + f"{X}\n")
 
@@ -1058,7 +1054,7 @@ class AvicaPipelineCore:
                                 if not any([status.has_default, status.in_input_config, status.in_context]):
                                     print(f"  {B}! {D}{name:<15}·{X} {Y}missing{X}")
                         result      = step.run(**pipe_kwargs)
-
+                        result.end_stamp    =   datetime.now()
                         PipelineContext.validation_success  = any(result.success)
                         if pipe_kwargs.get('lf') is not None:
                             PipelineContext.params['lf'] = pipe_kwargs.get('lf')
@@ -1123,7 +1119,7 @@ class AvicaPipelineCore:
                 self.allresults.append(result)
 
                 elapsed = (result.end_stamp - result.start_stamp).total_seconds()
-                status  = "OK" if all(result.success) else "FAILED"
+                status  = "OK" if result.success_count != 0 else "FAILED"
                 log.info(
                     f"[{step.name}] {status} | "
                     f"✓ {result.success_count}  ✗ {result.failed_count} | "
@@ -1214,7 +1210,7 @@ class CasaTask:
     def task_meta(self) -> str:
         return {'name':self.__class__.__name__}
 
-    def parse_to_step(self, task_name, logfile:str, errf:str, casadir:str, mpi_cores:int=5) -> CasaStep:
+    def parse_to_step(self, task_name:str, logfile:str, errf:str, casadir:str, mpi_cores:int=5) -> CasaStep:
         task_cmd            =   CasaTaskCMD(
                                     args= self.to_args(),
                                     casadir=casadir,
@@ -1411,7 +1407,7 @@ class GenerateAndAppendAntab:
 @dataclass
 class ImportFITSIdi(CasaTask):
     vis:              str  = ""
-    fitsidifile:      list[str] = field(default_factory=list)
+    fitsidifile:      List[str] = field(default_factory=list)
     constobsid:       bool  = True
     scanreindexgap_s: float = 15.0
 

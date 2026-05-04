@@ -22,7 +22,7 @@ from .helpers import alls_fromobs, update_from_avicameta, check_target_in_ms, fi
 
 from .core import PipelineStepBase, StepResult, ColName, PipelineContext, WorkDirMeta
 from .core import step_stage, InitVariables, RunValidation,  UpdateResults, UpdateSheet, CasaSetup
-from .core import ImportFITSIdi, MsTransform, MpiCasaPayload, PicardPayload, GenerateAndAppendAntab, PicardTask
+from .core import ImportFITSIdi, MsTransform, MpiCasaPayload, PicardPayload, GenerateAndAppendAntab, PicardTask, PersistentMpiCasaRunner
 from .config import PHASESHIFT_PERL_SCRIPT
 
 log = logging.getLogger("avica.pipeline")
@@ -192,21 +192,19 @@ class PreProcessFitsIdi(PipelineStepBase):
         # ___________________________________________________________                                                        Fill meta [optional]
 
         with step_stage("reading input file from fitsfile data", fitsfiles=fitsfiles):
-            meta_from_fitsfile(fitsfiles_used[0], target, wd_ifolder, metafolder, reference_ifolder, do_manual_selection=True)
-
             if multifreqid:
                 meta_from_fitsfile_freqid(fitsfiles_used, target, wd_ifolder, metafolder, reference_ifolder, do_manual_selection=True)
+            else:
+                meta_from_fitsfile(fitsfiles_used[0], target, wd_ifolder, metafolder, reference_ifolder, do_manual_selection=True)
 
         with step_stage("validate and collect results.", fitsfiles=fitsfiles):
             validate_tsys_count_multifreqid    =   all([count_tsys_in_fitsfile(ff_freqid, target) for ff_freqid in fitsfiles_used if "freqid" in ff_freqid]) if multifreqid else True
 
             #### _________________________________________________________                       if count_tsys_in_fitsfile(fitsfiles_used[0], target) and validate_tsys_count_multifreqid:           # this ensures that we take fitsfile with max TSYS rows (viz validates non multifreqid) - TODO: doesn't validate mixed w/w.o freqid splitted fitsfiles
             self.result.success = [count_tsys_in_fitsfile(ff, target)>0 for ff in fitsfiles_used]
-            if any(self.result.success):
-                self.result.success_count += 1
-            else:
-                self.result.failed_count += 1
-            lf.put_value("success")
+            self.result.success_count = sum(self.result.success)
+            self.result.failed_count = len(self.result.success) - self.result.success_count
+            # lf.put_value("success")
         self.result.end_stamp   =   datetime.now()
 
         return self.result
@@ -233,7 +231,7 @@ class FitsIdiToMS(PipelineStepBase):
                                        success_count=0, failed_count=0, start_stamp=datetime.now())
     # ----------------------------------------------------------
 
-    def run(self, lf, casadir, wd_ifolder):
+    def run(self, lf, casadir, wd_ifolder, mpi_cores_importfitsidi=5):
         self.result.start_stamp   = datetime.now()
         wd_meta         =   WorkDirMeta(wd_ifolder=wd_ifolder)
         fitsfiles       =   wd_meta.ff_used
@@ -328,20 +326,31 @@ class FitsIdiToMS(PipelineStepBase):
                 _           =   del_fl(Path(wd_ifolder_payload).parent, 1,fl="*stored*", rm=True)
                 _           =   del_fl(Path(wd_ifolder_payload).parent, 1,fl="*tmp*", rm=True)
 
-            with step_stage("payload execution", vis=vis):
-                payload                     =   MpiCasaPayload(tasks_list=tasks_list)
-                payload.run()
-
+        with step_stage("MPI execution", vis=vis):
+            res         =   []
+            mpi_runner = PersistentMpiCasaRunner(casadir=casadir, mpi_cores=mpi_cores_importfitsidi)
+            for casastep in tasks_list:
+                print(f"processing vis={casastep.cmd.args['vis']}")
+                mpi_res = mpi_runner.run_task(
+                            task_name=casastep.cmd.task_casa,
+                            args=casastep.cmd.args,
+                            args_type=casastep.cmd.args_type,
+                            block=False,
+                            target_server=None,)
+                res.append(mpi_res)
 
         # ---------------- finalize outputs and metadata
 
-        for casastep in tasks_list:
-            output_vis = Path(casastep.cmd.args['vis'])
+        for i, casastep in enumerate(tasks_list):
+            final_response      =   mpi_runner.get_response(res[i]["ret"], block=True)
+            output_vis          =   Path(casastep.cmd.args['vis'])
             if output_vis.exists():
+                print(f"processed vis={casastep.cmd.args['vis']}")
                 self.result.success_count    +=  1
                 self.result.desc.append(f"FITS to MS conversion successfull! for {output_vis.name}")
                 self.result.success.append(True)
             else:
+                print(f"failed vis={casastep.cmd.args['vis']}")
                 self.result.failed_count     +=  1
                 # last_log = latest_file(Path(output_vis).parent, '*err.out*')
                 self.result.desc.append(f"failed! vis:{output_vis.name} check logs: {errcasalogfile}")
