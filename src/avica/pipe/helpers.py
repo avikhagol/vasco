@@ -33,7 +33,7 @@ def get_wd_ifolder_multiplefits(fitsfiles, target_dir, ifolder):
 
     wds = []
     for fitsfile in fitsfiles:
-        wds.extend(str(Path(iwd).parent) for iwd in iwd_for_fitsfile(fitsfile, target_dir, ifolder=ifolder, create=False, allwds=True)[0])       # not taking set, as that randomizes wds for further selection, we anyway select the first wd with fitting criterion
+        wds.extend(str(Path(iwd).parent.absolute()) for iwd in iwd_for_fitsfile(fitsfile, target_dir, ifolder=ifolder, create=False, allwds=True)[0])       # not taking set, as that randomizes wds for further selection, we anyway select the first wd with fitting criterion
     wds             =   np.sort(list(set(wds)))
 
     new             =   False
@@ -43,7 +43,7 @@ def get_wd_ifolder_multiplefits(fitsfiles, target_dir, ifolder):
 
     for wd in wds:
 
-        rawf        =   Path(wd) / 'raw'
+        rawf        =   Path(wd).absolute() / 'raw'
         found_ffnames = {f.name for f in rawf.glob('*fits') if f.is_file()}
         if  all(expected_ffname in found_ffnames for expected_ffname in expected_ffnames):
             new         =   False
@@ -1268,7 +1268,7 @@ def meta_from_fitsfile(fitsfile, target, wd_ifolder, metafolder, reference_ifold
     }
 
     if not do_manual_selection:
-        raise NotImplementedError(f"identify sources from fitsfile")
+        raise NotImplementedError("identify sources from fitsfile")
         cmd_source      =   ['-t', fitsfile]
         run_avica(wd_ifolder, cmd_args=cmd_source, sources=[target])
         source          =   read_avicameta(avicametafile=source_dict)
@@ -1311,7 +1311,7 @@ def meta_from_fitsfile_freqid(fitsfiles, target, wd_ifolder, metafolder, referen
             wd_ifolder_freqid = f"{Path(wd_ifolder).absolute()}_{freqid}"
             if not Path(wd_ifolder_freqid).exists(): shutil.copytree(wd_ifolder, wd_ifolder_freqid, dirs_exist_ok=True)
 
-            params_freqid, _, _         =   read_inputfile(wd_ifolder_freqid, "observation.inp")
+            params_freqid, _, _         =   read_inputfile(wd_ifolder, "observation.inp")
             params_freqid['ms_name']    =   f"{Path(params_freqid['ms_name']).stem}_{freqid}" + Path(params_freqid['ms_name']).suffix
 
             del_fl(wd_ifolder_freqid, 0, "observation.inp", rm=True)
