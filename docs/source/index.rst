@@ -20,7 +20,7 @@ Getting Started
 
 AVICA: Automated VLBI pipeline in CASA.
 
-.. asciinema:: 945113
+.. asciinema:: 1016974
    :rows: 30
    :cols: 120
    :speed: 1.5
@@ -33,36 +33,28 @@ AVICA: Automated VLBI pipeline in CASA.
 About
 =====
 
-**avica** is a Python package for the automated calibration of Very Long Baseline Interferometry (VLBI) data.
+**AVICA** is a Python package for the automated calibration of Very Long Baseline Interferometry (VLBI) data.
 It provides modules to ingest, manipulate, and calibrate *FITS-IDI* and *Measurement Set* files containing raw visibilities.
 
 Installation
 ============
 
-Since the monolithic version of casa includes its own internal Python 3 installation,
-it is best to install avica within a Python environment that matches the casa version.
+The recommended way to install `avica` is by using the `pipx` package manager. This installs `avica` into a
+dedicated virtual environment and adds it to your `PATH`. Installation instructions for `pipx` can be found at `this link`_.
 
-
-.. code-block:: bash
-
-   $ /path/to/casadir/bin/python3 -m venv MY_ENV_DIR
-   $ source MY_ENV_DIR/bin/activate
-
+.. _this link: https://pipx.pypa.io/stable/how-to/install-pipx/
 
 .. code-block:: bash
 
-   $ pip install avica
+    $ pipx install avica
 
-Alternatively, you can use the following installation method,
-which automatically includes the necessary casa dependency for avica's internal operations.
+Alternatively, you can install `avica` within a Python environment.
 
 .. code-block:: bash
 
-   $ pip install avica[all]
+   $ source /path/to/env/bin/activate
+   $ python3 -m pip install avica
 
-Note that you must still provide the path to your casadir.
-This ensures that the pipeline uses the same monolithic casa version, ideally the one downloaded for
-rPicard to execute specific tasks like mstransform and importfitsidi within an isolated environment.
 
 Setup
 =====
@@ -80,13 +72,15 @@ The pipeline is configured via a plain-text file in the current working director
 .. code-block:: python
 
    # Required
-   folder_for_fits         =  "reductions/"
-   target_dir              =  "/path/to/target/dir"
-   casadir                 =  "path/to/monolithic-casa/casa-6.x.x-xx-py3.xx.xxx/"
+   folder_for_fits    =  "/path/to/fitsfile/dirs/"
+   casadir            =  "path/to/monolithic-casa/casa-6.x.x-xx-py3.xx.xxx/"
 
    # Optional
+   target_dir              =  "reductions/"
    picard_input_template   =  "/path/to/input_template"
    mpi_cores_rpicard       =  10
+   mpi_cores_snrating      =  5
+   mpi_cores_importfitsidi =  5
    rfc_catalogfile         =  "/path/to/rfc/catalogfile"
    separation_thres        =  850.0
    size_limit              =  2000.0
@@ -94,7 +88,7 @@ The pipeline is configured via a plain-text file in the current working director
    worksheet               =  None
    n_calib                 =  5
    n_refant                =  4
-   snr_threshold_phref     =  6
+   snr_threshold_phref     =  7
    minsnr                  =  3.2
 
 

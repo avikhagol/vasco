@@ -1,63 +1,55 @@
-VLBI and SMILE-based CASA Optimization (VASCO) pipeline has been renamed to AVICA.
-
-# avica
-AVICA: Automated VLBI pipeline in CASA
-
-
-Documentation : https://avica.readthedocs.io/en/latest/
+>NOTE: VLBI and SMILE-based CASA Optimization pipeline has been renamed to AVICA.
 
 > submitted to A&A
 
-[![asciicast](https://asciinema.org/a/945113.svg)](https://asciinema.org/a/945113)
-> Demo of the AVICA pipeline running end-to-end.
+- [Contents:](#contents)
+  - [1. About](#about)
+  - [2. Installation](#installation)
+  - [3. Usage](#usage)
+
+# About
+AVICA: Automated VLBI pipeline in CASA
+
+
+Demo of the AVICA pipeline running end-to-end:
+
+[![asciicast](https://asciinema.org/a/1016974.svg)](https://asciinema.org/a/1016974)
+
+Documentation : https://avica.readthedocs.io/en/latest/
 
 
 # Installation
 
-> Needs Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+ \
+> Requires Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+ \
 > Python >=3.9
  
-Since the monolithic version of casa includes its own internal Python 3 installation, 
-it is best to install `avica` within a Python environment that matches the casa version.
 
-<!--Since the monolithic version of casa includes its own internal Python 3 installation, 
-it is best to install avica within a Python environment that matches the casa version.
-
-Specifically, if you are not using the "all" installation option, 
-you should use the casa Python executable itself to create a virtual environment first. For example, for `casa-6.7.0-31-py3.10.el8/` use a virtual environment created using `Python 3.10`. Conda can be used for creating the environment:
--->
+The recommended way to install `avica` is by using the `pipx` package manager. This installs `avica` into a
+dedicated virtual environment and adds it to your `PATH`. Installation instructions for `pipx` can be found at [this link](https://pipx.pypa.io/stable/how-to/install-pipx/).
 
 ```bash
-   
-   $ path/to/python3 -m venv MY_ENV_DIR
-   $ source MY_ENV_DIR/bin/activate
+  # python3 -m pip install --user pipx
+  pipx install avica
+```
+
+Alternatively, you can install `avica` within a Python environment.
+
+```bash
+   python3 -m venv /path/to/env
+   source /path/to/env/bin/activate
+   python3 -m pip install avica
 
 ```
 
-```bash
-
-   $ pip install avica
-
-```
-
-Alternatively, you can use the following installation method, 
-which automatically includes the necessary casa dependency for avica's internal operations.
-
-```bash
-
-   $ pip install avica[all]
-
-```
-
-Note that you must still provide the path to your casadir. 
+Note that you must provide the path to your monolithic casa directory in the configuration file.
 This ensures that the pipeline uses the same monolithic casa version, ideally the one downloaded for 
-rPicard to execute specific tasks like mstransform and importfitsidi within an isolated environment.
+rPicard. For more details, see: [documentation](https://avica.readthedocs.io/en/latest/).
 
-## Manual
+### Manual
 
 1. Clone the repository to the desired destination.
 
-```
+```bash
 git clone https://github.com/avikhagol/avica.git
 ```
 
