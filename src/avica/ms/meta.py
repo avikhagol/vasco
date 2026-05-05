@@ -129,8 +129,7 @@ class BandInfoMS:
         tb_ants = ctable(_ants, ack=False)
 
         spws_str = ",".join(map(str, spws))
-        sub_tb_tsys = tb_tsys.query(f"SPECTRAL_WINDOW_ID IN [{spws_str}]")
-
+        sub_tb_tsys = tb_tsys.query(f"SPECTRAL_WINDOW_ID IN {spws}")
         ants = np.array(tb_ants.getcol('NAME'))
         tsys_ants = np.array(sub_tb_tsys.getcol('ANTENNA_ID'))
 
