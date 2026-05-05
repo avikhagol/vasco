@@ -361,7 +361,7 @@ _casa_path_setup_done: bool = False
 _added_casa_paths: list = []      # CASA python site-packages dirs we inserted
 _added_casa_lib_dirs: list = []   # CASA lib dirs (for LD_LIBRARY_PATH)
 
-_CASA_INPROCESS_MODULES = ["casatools", "casatasks", "casampi"]  # adjust as needed
+_CASA_INPROCESS_MODULES = ["casacore"]
 
 
 def get_added_casa_paths() -> list:
@@ -496,8 +496,9 @@ DEFAULT_PARAMS: dict = {
     "targetname_col"            :   "TARGET_NAME",
     "mpi_cores_rpicard"         :   10,
     "hi_freq_ref"               :   11,         # in GHz
-    "use_casadir_pythonpath"    :   True,
+    "use_casadir_pythonpath"    :   False,
     "mpi_cores_snrating"        :   5,
+    "mpi_cores_importfitsidi"   :   5,
     "snr_threshold_phref"       :   7,
     "flux_threshold_phref"      :   0.15,
 }

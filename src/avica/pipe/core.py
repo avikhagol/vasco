@@ -12,6 +12,8 @@ from avica.fitsidiutil.op import get_colname, dict_baseline
 from avica.fitsidiutil.obs import ListObs
 from avica.fitsidiutil.split import SplitData
 from avica.sources import check_band
+from avica.util import make_art
+
 
 from copy import deepcopy
 
@@ -284,7 +286,7 @@ def split_in_freqid(fitsfiles, verbose=False):
                     print(f"\nsplitting... FREQID=={freqid}")
 
                 sp      =   SplitData(inpfits=fitsfile, outfits=newfitsfile, verbose=verbose)
-                sp.split(source_ids=None, freqids=freqid)
+                sp.split(source_ids=None, freqids=[freqid])
 
                 split_result[fitsfile].append(newfitsfile)
                 if fitsfile in workingfits:
@@ -369,7 +371,7 @@ class StepResult:
 
     desc                :   List[str]     =   field(default_factory=list)
     success             :   List[bool]     =   field(default_factory=list)
-    end_stamp           :   datetime = datetime.now()
+    end_stamp: datetime = field(default_factory=datetime.now)
 
 class ColName(NamedTuple):
     working_col     :   str
@@ -456,96 +458,79 @@ def pipeline_context(params: dict):
     finally:
         PipelineContext.reset()
 
-@dataclass
 class WorkDirMeta:
-    wd_ifolder  :   str
+    def __init__(self, wd_ifolder):
+        self.wd_ifolder = wd_ifolder
 
-    wd: str = field(init=False)
-    vis: str = field(init=False)
-    ms_name: str = field(init=False)
-    obs_dic: Dict = field(init=False)
-    metafolder: str = field(init=False)
-
-
-    # -------------- input wd_ifolder & fitsfiles used
-
-    ff_used : List[str] =   field(default_factory=list)
-    wd_used : List[str] =   field(default_factory=list)
-
-    # --------------- band | target
-
-    band: str = ""
-    target: str = ""
-
-    wd_b: str = field(default=str)
-    wd_b_target: str = field(default=str)
-    vis_b: str = field(default=str)
-    vis_b_target: str = field(default=str)
-
-    # --------------- metafile names
-    meta_av_wd_ff  : str =   "available_wd_ifolder.avica"
-    meta_used_ff :  str = "fitsfiles_used.avica"
-    meta_sources_snrating: str = "sources.avica"
-    meta_refants_snrating: str = "refants.avica"
-    msmeta_sources:str = 'msmeta_sources.avica'
-
-    snrating_out: str = "snrating.out"
-    listobs_out:    str =   "listobs_fits.out"
-    match_coord_out: str = "class_search.out"
-
-
-
-    metafile_available_wd_ff: str = ""
-    metafile_used_ff: str = ""
-    metafile_sources_snrating: str = ""
-    metafile_refants_snrating: str = ""
-    outfile_listobs_out: str = ""
-    matched_coord_outfile: str = ""
-
-    # ---  initialize values
-
-    def __post_init__(self):
-        wd         =   Path(self.wd_ifolder).parent
-        self.wd         =   str(wd)
-        self.metafolder =   str(wd / "avica.meta")
+        # -----------------------------
+        self.wd         =   Path(self.wd_ifolder).parent.absolute()
+        self.metafolder =   str(self.wd / "avica.meta")
         self.obs_dic     =   self.get_inp(inpfile="observation.inp")
-        if self.obs_dic:
-            if isinstance(self.obs_dic, list):
-                self.obs_dic = self.obs_dic[0]
-            self.ms_name    =   self.obs_dic['ms_name']
-            self.vis    =   str(wd / self.ms_name)
-        else:
-            self.obs_dic =  None
-            self.ms_name    =   None
-            self.vis    =   None
+        self.ms_name    =   None
+        self.vis    =   None
 
+         # -------------- input wd_ifolder & fitsfiles used
+
+        self.ff_used : List[str] =   []
+        self.wd_used : List[str] =   []
+
+        # --------------- band | target
+
+        self.band: str = ""
+        self.target: str = ""
+
+        self.wd_b: str = ""
+        self.wd_b_target: str = ""
+        self.vis_b: str = ""
+        self.vis_b_target: str = ""
+
+        # --------------- metafile names
+        self.meta_av_wd_ff  : str =   "available_wd_ifolder.avica"
+        self.meta_used_ff :  str = "fitsfiles_used.avica"
+        self.meta_sources_snrating: str = "sources.avica"
+        self.meta_refants_snrating: str = "refants.avica"
+        self.msmeta_sources:str = 'msmeta_sources.avica'
+
+        self.listobs_filename : str = "listobs.json"
+
+        self.snrating_out: str = "snrating.out"
+        self.listobs_out:    str =   "listobs_fits.out"
+        self.match_coord_out: str = "class_search.out"
+
+        # --------------- metafile complete paths
+        self.wd_used : str = ""
+
+        self.metafile_available_wd_ff = f"{self.metafolder}/{self.meta_av_wd_ff}"
+        self.metafile_used_ff = f"{self.metafolder}/{self.meta_used_ff}"
+        self.metafile_msmeta_sources = f"{self.metafolder}/{self.msmeta_sources}"
+        self.metafile_sources_snrating  = f"{self.metafolder}/{self.meta_sources_snrating}"
+        self.metafile_refants_snrating  = f"{self.metafolder}/{self.meta_refants_snrating}"
+        self.metafile_listobs = f"{self.metafolder}/{self.listobs_filename}"
         self.outfile_listobs_out    =   f"{self.metafolder}/{self.listobs_out}"
         self.matched_coord_outfile  =   f"{self.metafolder}/{self.match_coord_out}"
 
-
-        if wd.exists():
-            # --------------- get used wd_ifolders and fitsfiles
-            self.metafile_available_wd_ff = f"{self.metafolder}/{self.meta_av_wd_ff}"
-            self.metafile_used_ff = f"{self.metafolder}/{self.meta_used_ff}"
-            self.metafile_msmeta_sources = f"{self.metafolder}/{self.msmeta_sources}"
-            self.metafile_sources_snrating  = f"{self.metafolder}/{self.meta_sources_snrating}"
-            self.metafile_refants_snrating  = f"{self.metafolder}/{self.meta_refants_snrating}"
-
-
-            if Path(self.metafile_available_wd_ff).exists():
+        # --------------- get used wd_ifolders and fitsfiles
+        if Path(self.metafile_available_wd_ff).exists():
                 dic_available_wd_ff = read_metafile(self.metafile_available_wd_ff)
                 if "input_folder" in dic_available_wd_ff:
                     self.wd_used = dic_available_wd_ff['input_folder']
 
-            if Path(self.metafile_used_ff).exists():
-                dic_used_ff = read_metafile(self.metafile_used_ff)
+        if Path(self.metafile_used_ff).exists():
+            dic_used_ff = read_metafile(self.metafile_used_ff)
 
-                if "filepath" in dic_used_ff:
-                    self.ff_used = dic_used_ff['filepath']
+            if "filepath" in dic_used_ff:
+                self.ff_used = dic_used_ff['filepath']
+
+        if self.obs_dic:
+            if isinstance(self.obs_dic, list):
+                self.obs_dic = self.obs_dic[0]
+            self.ms_name    =   self.obs_dic['ms_name']
+            self.vis    =   str(self.wd / self.ms_name)
+
 
     def to_new_WD(self, band, target, create=True) -> tuple[Path, Path]:
-        iwd                 =   Path(self.wd_ifolder)
-        wd_suffix           =   iwd.parent
+        iwd                 =   Path(self.wd_ifolder).absolute()
+        wd_suffix           =   iwd.parent.absolute()
         iwd_b_suffix        =   iwd
 
         if band:
@@ -573,12 +558,10 @@ class WorkDirMeta:
         return result
 
 
-    def get_diclistobs(self, listobs_filename='listobs.json'):
+    def get_diclistobs(self):
         dic_data = {}
-
-        listobsfile = f"{self.metafolder}/{listobs_filename}"
-        if Path(listobsfile).exists():
-            dic_data = read_metafile(listobsfile)
+        if Path(self.metafile_listobs).exists():
+            dic_data = read_metafile(self.metafile_listobs)
             if 'listobs' in dic_data:
                 for idx_str, obs_content in dic_data['listobs'].items():
                     if 'scan' not in obs_content:
@@ -587,8 +570,10 @@ class WorkDirMeta:
                         obs_content['source_id'] = obs_content.pop('sid')
         return dic_data
 
+
     def to_dict(self):
-        return asdict(self)
+        return self.__dict__
+
 
 @dataclass
 class PipelineStepValidatorResult:
@@ -686,7 +671,7 @@ class InitVariables(PipelineStepValidatorBase):
         if isinstance(fitsfilenames, str):
             fitsfilenames = fitsfilenames.split(",")
 
-        wd_ifolder, filepaths                       = setup_workdir(lf, target_dir, fitsfilenames, allfitsfile, picard_input_template=picard_input_template)
+        wd_ifolder, filepaths                       = setup_workdir(lf, f"{str(Path(target_dir).absolute())}/", fitsfilenames, allfitsfile, picard_input_template=picard_input_template)
         if not filepaths:
             return PipelineStepValidatorResult(success=[False], msg="no fitsfiles found")
 
@@ -893,13 +878,6 @@ class UpdateSheet(PipelineStepValidatorBase):
         print("Failed Cells\t:", failed)
         return PipelineStepValidatorResult(success=[PipelineContext.validation_success], msg="")
 
-def _art(title: str) -> str:
-    return ( f"\n"
-        f"    ╔══════════════════════════════════════════════════════════════════╗\n"
-        f"    ║{title.upper():^66}║\n"
-        f"    ╚══════════════════════════════════════════════════════════════════╝\n"
-    )
-
 class AvicaPipelineCore:
 
     def __init__(self, pipe_params, steps):
@@ -984,6 +962,7 @@ class AvicaPipelineCore:
                 datefmt="%Y-%m-%d %H:%M:%S"
             ))
             log.addHandler(fh)
+            log.propagate = False
         # PipelineContext.params = DEFAULT_PARAMS
 
         PipelineContext.params.clear()
@@ -991,7 +970,7 @@ class AvicaPipelineCore:
         PipelineContext.params['init_params'] = self.pipe_params
 
         # ~~~~~~~~~~~ cli messages ~~~~~~~~~~~~~~~~~~~~~~~~~~
-        print(_art("avica pipeline"))
+        make_art()
         print("Following steps will be executed in the sequence:")
         print(f"  {BC} - " + "\n   - ".join(self._steps.keys()) + f"{X}\n")
 
@@ -1058,9 +1037,9 @@ class AvicaPipelineCore:
                                 if not any([status.has_default, status.in_input_config, status.in_context]):
                                     print(f"  {B}! {D}{name:<15}·{X} {Y}missing{X}")
                         result      = step.run(**pipe_kwargs)
-
+                        result.end_stamp    =   datetime.now()
                         PipelineContext.validation_success  = any(result.success)
-                        if pipe_kwargs.get('lf') is not None:              # ← here
+                        if pipe_kwargs.get('lf') is not None:
                             PipelineContext.params['lf'] = pipe_kwargs.get('lf')
 
                         PipelineContext.result              = result
@@ -1123,7 +1102,7 @@ class AvicaPipelineCore:
                 self.allresults.append(result)
 
                 elapsed = (result.end_stamp - result.start_stamp).total_seconds()
-                status  = "OK" if all(result.success) else "FAILED"
+                status  = "OK" if result.success_count != 0 else "FAILED"
                 log.info(
                     f"[{step.name}] {status} | "
                     f"✓ {result.success_count}  ✗ {result.failed_count} | "
@@ -1214,7 +1193,7 @@ class CasaTask:
     def task_meta(self) -> str:
         return {'name':self.__class__.__name__}
 
-    def parse_to_step(self, task_name, logfile:str, errf:str, casadir:str, mpi_cores:int=5) -> CasaStep:
+    def parse_to_step(self, task_name:str, logfile:str, errf:str, casadir:str, mpi_cores:int=5) -> CasaStep:
         task_cmd            =   CasaTaskCMD(
                                     args= self.to_args(),
                                     casadir=casadir,
@@ -1411,7 +1390,7 @@ class GenerateAndAppendAntab:
 @dataclass
 class ImportFITSIdi(CasaTask):
     vis:              str  = ""
-    fitsidifile:      list[str] = field(default_factory=list)
+    fitsidifile:      List[str] = field(default_factory=list)
     constobsid:       bool  = True
     scanreindexgap_s: float = 15.0
 
@@ -1659,10 +1638,6 @@ def run_subprocess(cmd_list: List[str], inp_data: dict, mode: str = "stdin", cle
     stderr_thread.join()
 
     success = process.returncode == 0
-
-    # if not success:
-        # print("STDERR:\n", "".join(stderr_lines), flush=True)
-        # print("STDOUT:\n", "".join(stdout_lines), flush=True)
 
     for line in reversed(stdout_lines):
         line = line.strip()

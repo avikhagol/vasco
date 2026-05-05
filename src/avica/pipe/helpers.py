@@ -33,7 +33,7 @@ def get_wd_ifolder_multiplefits(fitsfiles, target_dir, ifolder):
 
     wds = []
     for fitsfile in fitsfiles:
-        wds.extend(str(Path(iwd).parent) for iwd in iwd_for_fitsfile(fitsfile, target_dir, ifolder=ifolder, create=False, allwds=True)[0])       # not taking set, as that randomizes wds for further selection, we anyway select the first wd with fitting criterion
+        wds.extend(str(Path(iwd).parent.absolute()) for iwd in iwd_for_fitsfile(fitsfile, target_dir, ifolder=ifolder, create=False, allwds=True)[0])       # not taking set, as that randomizes wds for further selection, we anyway select the first wd with fitting criterion
     wds             =   np.sort(list(set(wds)))
 
     new             =   False
@@ -43,7 +43,7 @@ def get_wd_ifolder_multiplefits(fitsfiles, target_dir, ifolder):
 
     for wd in wds:
 
-        rawf        =   Path(wd) / 'raw'
+        rawf        =   Path(wd).absolute() / 'raw'
         found_ffnames = {f.name for f in rawf.glob('*fits') if f.is_file()}
         if  all(expected_ffname in found_ffnames for expected_ffname in expected_ffnames):
             new         =   False
@@ -907,7 +907,7 @@ def find_url_tsys(fitsfile, proj=''):
     return urls
 
 
-def del_fl(wd:str, count:int=0, fl:str='*ms*', rm:bool=False):
+def del_fl(wd:str | Path, count:int=0, fl:str='*ms*', rm:bool=False):
     """delete files from the input folder
 
     Args:
@@ -1268,7 +1268,7 @@ def meta_from_fitsfile(fitsfile, target, wd_ifolder, metafolder, reference_ifold
     }
 
     if not do_manual_selection:
-        raise NotImplementedError(f"identify sources from fitsfile")
+        raise NotImplementedError("identify sources from fitsfile")
         cmd_source      =   ['-t', fitsfile]
         run_avica(wd_ifolder, cmd_args=cmd_source, sources=[target])
         source          =   read_avicameta(avicametafile=source_dict)
@@ -1301,7 +1301,7 @@ def meta_from_fitsfile(fitsfile, target, wd_ifolder, metafolder, reference_ifold
 
 
 
-def meta_from_fitsfile_freqid(fitsfiles, wd_ifolder, metafolder, do_manual_selection):
+def meta_from_fitsfile_freqid(fitsfiles, target, wd_ifolder, metafolder, reference_ifolder, do_manual_selection):
     """
     assumes wd_ifolder exists
     """
@@ -1311,28 +1311,25 @@ def meta_from_fitsfile_freqid(fitsfiles, wd_ifolder, metafolder, do_manual_selec
             wd_ifolder_freqid = f"{Path(wd_ifolder).absolute()}_{freqid}"
             if not Path(wd_ifolder_freqid).exists(): shutil.copytree(wd_ifolder, wd_ifolder_freqid, dirs_exist_ok=True)
 
-            params_freqid, _, _         =   read_inputfile(wd_ifolder_freqid, "observation.inp")
+            params_freqid, _, _         =   read_inputfile(wd_ifolder, "observation.inp")
             params_freqid['ms_name']    =   f"{Path(params_freqid['ms_name']).stem}_{freqid}" + Path(params_freqid['ms_name']).suffix
 
             del_fl(wd_ifolder_freqid, 0, "observation.inp", rm=True)
             create_config(params_freqid, f"{wd_ifolder_freqid}/observation.inp")
 
-            meta_from_fitsfile(ff, wd_ifolder_freqid, metafolder, do_manual_selection)
+            meta_from_fitsfile(ff, target, wd_ifolder_freqid, metafolder, reference_ifolder, do_manual_selection=do_manual_selection)
             freqid  +=  1
 
 
 def count_freqids(fitsfile):
-    from avica.fitsidiutil.io import FITSIDI
-
     hdul = read_idi(fitsfile)
-
     FREQID_CHK_HDUNAME = ['FREQUENCY', 'ANTENNA', 'GAIN_CURVE', 'SYSTEM_TEMPERATURE', 'SOURCE']
     freqids                     =   1
 
     try:
         ind_freqid_chk              =   [all(np.array(hdul[hduname_forfreqid]['FREQID'])==1) for hduname_forfreqid in FREQID_CHK_HDUNAME if hduname_forfreqid in hdul.names] # checking if there is only FREQID==1 or not
         if not all(ind_freqid_chk):
-            freqids                 =   len(hdul['FREQUENCY'].data['FREQID'])
+            freqids                 =   len(hdul['FREQUENCY']['FREQID'])
     except Exception as e:
         print("something went wrong!", e)
 
@@ -1340,8 +1337,8 @@ def count_freqids(fitsfile):
 
 
 def check_target_in_ms(vis, target):
-    from casatools import msmetadata
-    msmd = msmetadata()
+    from avica.ms.compat import CasaMSMetadata
+    msmd = CasaMSMetadata()
     found = False
 
     if Path(vis).exists():

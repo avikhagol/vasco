@@ -1,4 +1,6 @@
-from casatools import table, msmetadata, logsink
+from asyncore import read
+from posix import access
+from avica.ms.compat import CasaMSMetadata as msmetadata, ctable
 import polars as pl
 import numpy as np
 from scipy.spatial import distance
@@ -8,13 +10,6 @@ from pathlib import Path
 from typing import List
 from collections import defaultdict
 from avica.util import check_band
-
-avicalog=logsink('avica.casa_log')
-avicalog.setlogfile='avica.casa_log'
-avicalog.setglobal(True)
-
-#  utilities
-tb = table()
 
 def get_tb_data(vis, axs=[]):
     """get table data from the table by specifying valid columns in axs.
@@ -29,14 +24,21 @@ def get_tb_data(vis, axs=[]):
     Returns:
         list: list of data corresponding to the columns specified.
     """
-    tb.open(vis)
+    tb = ctable(vis, readonly=True, ack=False)
 
     available_cols = tb.colnames()
     res = []
     if len(axs):
         for ax in axs:
             if ax in available_cols:
-                res.append(tb.getcol(ax))
+                data_value = tb.getcol(ax)
+                if isinstance(data_value, np.ndarray):
+                    if data_value.ndim != 1:
+                        res.append(data_value.T)
+                    else:
+                        res.append(data_value)
+                else:
+                    res.append(data_value)
             else:
                 raise NameError(f"{ax} is not a valid column, choose from {','.join(available_cols)}")
     tb.close()
@@ -55,15 +57,12 @@ def select_long_scans(vis, fids=[], sources=[], nscan=5):
         res (dict):
         dict of fid with assoicated scan numbers for each fids
     """
-    tb = table()
-    tb_field = table()
-    tb.open(vis)
-
+    tb = ctable(vis, readonly=True, ack=False)
     res = {}
 
     if not fids:
         if sources:
-            tb_field.open(f"{vis}/FIELD")
+            tb_field = ctable(vis + "/FIELD", readonly=True, ack=False)
             fields = tb_field.getcol('NAME')
             for field in sources:
                 fids.append(list(fields).index(field))
@@ -93,29 +92,31 @@ def select_long_scans(vis, fids=[], sources=[], nscan=5):
 
 
 def getremovableant_fromsource(vis, source):
-    tb1 = table()
-    tb1.open(f"{vis}/FIELD")
+    tb1 = ctable(f"{vis}/FIELD", readonly=True, ack=False)
     idx_source = list(tb1.getcol("NAME")).index(source)
     tb1.close()
 
-    tb1.open(vis)
+    tb1 = ctable(vis, readonly=True, ack=False)
     anids = set()
-    anids.update(np.unique(tb1.query(f"FIELD_ID=={idx_source}").getcol('ANTENNA1')))
-    anids.update(np.unique(tb1.query(f"FIELD_ID=={idx_source}").getcol('ANTENNA2')))
+    subtb = tb1.query(f"FIELD_ID=={idx_source}")
+    anids.update(np.unique(subtb.getcol('ANTENNA1')))
+    anids.update(np.unique(subtb.getcol('ANTENNA2')))
+    subtb.close()
     tb1.close()
 
-    tb1.open(f"{vis}/ANTENNA")
+    tb1 = ctable(f"{vis}/ANTENNA", readonly=True, ack=False)
     annames = tb1.getcol("NAME")
     tb1.close()
 
-    anids_list = list(anids)
+    # anids_list = list(anids)
     rm_anids = []
 
-    source_annames = annames[anids_list]
+    # source_annames = annames[anids_list]
     for anid in range(len(annames)):
-        if not anid in anids:
+        if anid not in anids:
             rm_anids.append(list(range(len(annames))).pop(anid))
     return list(rm_anids), list(annames[rm_anids])
+
 
 
 def an_dic(vis, source=None, antenna=[], notantenna=[]):
@@ -185,7 +186,7 @@ def get_ant_scans(vis:str, fids:List):
     """
     ant_with_available_scans = defaultdict(lambda: defaultdict(set))
 
-    tb.open(vis)
+    tb = ctable(vis, readonly=True, ack=False)
     for fid in fids:
 
         subtb = tb.query(query=f'FIELD_ID=={fid}', columns='DISTINCT SCAN_NUMBER,ANTENNA1,ANTENNA2')
@@ -336,8 +337,8 @@ def chk_tbl(subt1, subt2, relax_order=False):
 
 
 def verifysubt_byeachelem(refvis, newvis):
-    tb = table()
-    tb.open(f"{refvis}")
+    tb = ctable(refvis, readonly=True, ack=False)
+
     keywords =tb.keywordnames()
     tb.close()
 
@@ -361,10 +362,9 @@ def verifysubt_byeachelem(refvis, newvis):
     return dic_kywchecked
 
 def verifysubt_nrows(refvis, newvis):
-    tb = table()
-    tb1 = table()
+
     defectedsubt = []
-    tb.open(f"{refvis}")
+    tb = ctable(refvis, readonly=True, ack=False)
     keywords_tochk =tb.keywordnames()
     tb.close()
 
@@ -374,13 +374,14 @@ def verifysubt_nrows(refvis, newvis):
             keywords_tochk.remove(keyw)
 
     for subt in keywords_tochk:
-        tb.open(f"{refvis}/{subt}")
-        tb1.open(f"{newvis}/{subt}")
+        tb = ctable(f"{refvis}/{subt}", readonly=True, ack=False)
+        tb1 = ctable(f"{newvis}/{subt}", readonly=True, ack=False)
 
         nrows = tb.nrows()
         nrows1 = tb1.nrows()
 
-        tb.close(), tb1.close()
+        tb.close()
+        tb1.close()
 
         if nrows1!=nrows:
             defectedsubt.append(subt)
@@ -393,39 +394,48 @@ def verifysubt_nrows(refvis, newvis):
 
 def read_gain(vis, query=''):
 
-    tb = table()
-    tb.open(f"{vis}/GAIN_CURVE")
+    orig_tb = ctable(f"{vis}/GAIN_CURVE", readonly=True, ack=False)
     if query:
-        tb = tb.query(query)
+        tb = orig_tb.query(query)
+    else:
+        tb = orig_tb
     anid,feedid,spwid,time,interval,typ,numpoly,gain,sens = [tb.getcol(col) for col in ['ANTENNA_ID','FEED_ID','SPECTRAL_WINDOW_ID','TIME','INTERVAL','TYPE','NUM_POLY','GAIN','SENSITIVITY']]
     data = {
         'anid':anid,'feedid':feedid,'spwid':spwid,'time':time,'interval':interval,'typ':typ,'numpoly':numpoly,'gain':gain.T,'sens':sens.T,
     }
     tb.close()
+    if tb is not orig_tb:
+        orig_tb.close()
     return pl.DataFrame(data=data)
 
 def read_antenna(vis, query=''):
 
-    tb = table()
-    tb.open(f"{vis}/ANTENNA")
+    orig_tb = ctable(f"{vis}/ANTENNA", readonly=True, ack=False)
     if query:
-        tb = tb.query(query)
+        tb = orig_tb.query(query)
+    else:
+        tb = orig_tb
     offs, pos, typ, dishdiam, flag, mount, name, station = [tb.getcol(col) for col in ['OFFSET','POSITION', 'TYPE', 'DISH_DIAMETER', 'FLAG_ROW', 'MOUNT', 'NAME', 'STATION']]
 
     data = {
         'offs':offs.T, 'pos':pos.T, 'typ':typ, 'dishdiam':dishdiam, 'flag':flag, 'mount':mount, 'name':name, 'station':station,
     }
     tb.close()
+    if tb is not orig_tb:
+        orig_tb.close()
     return pl.DataFrame(data=data)
 
 def read_weather(vis, query=''):
 
-    tb = table()
-    tb.open(f"{vis}/WEATHER")
+    orig_tb = ctable(f"{vis}/WEATHER", readonly=True, ack=False)
     if query:
-        tb = tb.query(query)
+        tb = orig_tb.query(query)
+    else:
+        tb = orig_tb
     anid, interval, time, dewpoint, h2o, ionose, pres, temp, winddir, windspeed = [tb.getcol(col) for col in ['ANTENNA_ID','INTERVAL','TIME','DEW_POINT','H2O','IONOS_ELECTRON','PRESSURE','TEMPERATURE','WIND_DIRECTION','WIND_SPEED']]
     tb.close()
+    if tb is not orig_tb:
+        orig_tb.close()
 
     data = {
         'anid':anid, 'interval':interval, 'time':time, 'dewpoint':dewpoint, 'h2o':h2o, 'ionose':ionose, 'pres':pres, 'temp':temp, 'winddir':winddir, 'windspeed':windspeed
@@ -435,13 +445,16 @@ def read_weather(vis, query=''):
 
 def read_syscal(vis, query=''):
 
-    tb = table()
-    tb.open(f"{vis}/SYSCAL")
+    orig_tb = ctable(f"{vis}/SYSCAL", readonly=True, ack=False)
     if query:
-        tb = tb.query(query)
+        tb = orig_tb.query(query)
+    else:
+        tb = orig_tb
 
     anid,feedid,interval,spwid,time,tsys = [tb.getcol(col) for col in ['ANTENNA_ID', 'FEED_ID', 'INTERVAL', 'SPECTRAL_WINDOW_ID', 'TIME', 'TSYS']]
     tb.close()
+    if tb is not orig_tb:
+        orig_tb.close()
 
     data = {
         'anid' : anid,
@@ -460,13 +473,16 @@ def read_syscal(vis, query=''):
 
 
 def read_phasecal(vis, query=''):
-    tb = table()
-    tb.open(f"{vis}/PHASE_CAL")
+    orig_tb = ctable(f"{vis}/PHASE_CAL", readonly=True, ack=False)
     if query:
-        tb = tb.query(query)
+        tb = orig_tb.query(query)
+    else:
+        tb = orig_tb
 
     anid,feedid,spwid,time,interval,num_tones,tonefreq, phcal, cable_cal = [tb.getcol(col) for col in ['ANTENNA_ID','FEED_ID','SPECTRAL_WINDOW_ID','TIME', 'INTERVAL','NUM_TONES','TONE_FREQUENCY','PHASE_CAL','CABLE_CAL']]
     tb.close()
+    if tb is not orig_tb:
+        orig_tb.close()
 
     data = {
         'anid' : anid,
@@ -486,7 +502,10 @@ def read_phasecal(vis, query=''):
 
 
 def fix_duplicatedrows(refvis, newvis, nomodify=True):
-    tb = table()
+    """
+    TODO: not tested with the readonly.
+    """
+    tb = ctable()
     dic_subts    =  verifysubt_byeachelem(refvis, newvis)
     dupl_removed = 0
     tobe = "to be" if nomodify else " are"
@@ -499,7 +518,7 @@ def fix_duplicatedrows(refvis, newvis, nomodify=True):
             print("\t",subt, "rows", (dupr[0], dupr[-1]))
             dupl_removed+=1
 
-            tb.open(f"{newvis}/{subt}", nomodify=nomodify)
+            tb = ctable(f"{newvis}/{subt}", readonly=nomodify, ack=False)
             if not nomodify:
                 tb.removerows(dupr)
                 tb.flush()
