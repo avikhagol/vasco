@@ -496,7 +496,7 @@ DEFAULT_PARAMS: dict = {
     "targetname_col"            :   "TARGET_NAME",
     "mpi_cores_rpicard"         :   10,
     "hi_freq_ref"               :   11,         # in GHz
-    "use_casadir_pythonpath"    :   True,
+    "use_casadir_pythonpath"    :   False,
     "mpi_cores_snrating"        :   5,
     "mpi_cores_importfitsidi"   :   5,
     "snr_threshold_phref"       :   7,
