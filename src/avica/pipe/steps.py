@@ -1,4 +1,5 @@
 
+import json
 from avica.util import read_metafile, read_inputfile, save_metafile, latest_file, create_config
 from pathlib import Path
 import shutil
@@ -120,6 +121,10 @@ class PreProcessFitsIdi(PipelineStepBase):
 
             with open(f"{wd_meta.outfile_listobs_out}", 'w') as ppoutbuff:
                 ppoutbuff.write(f"{ppout}")
+
+            with open(f"{wd_meta.metafile_listobs}", 'w') as jsonlistobs:
+                json.dump(dic_obs_summary, jsonlistobs)
+
             self.output_printable += f"\n\n{ppout}"
             if verbose: print(f"\n\n{ppout}")
             log.info(f"\n\n{ppout}")
@@ -357,7 +362,7 @@ class FitsIdiToMS(PipelineStepBase):
                 if not all([Path(ff).exists() for ff in casastep.cmd.args['fitsidifile']]):
                     self.result.desc.append(f"input fitsidifile not found! {casastep.cmd.args['fitsidifile']}")
                 self.result.success.append(False)
-
+        mpi_runner.close()
 
         self.result.end_stamp                   =   datetime.now()
         del_fl(metafolder, 0, "available_wd_ifolder.avica", rm=True)
@@ -530,7 +535,7 @@ class AverageMS(PipelineStepBase):
 
     # ----------------------------------------------------------
 
-    def run(self, lf, wd_ifolder, casadir, verbose=True):
+    def run(self, lf, wd_ifolder, casadir, mpi_cores_avgms=5, verbose=True):
         self.result.start_stamp   = datetime.now()
         from avica.ms.meta import BandInfoMS
         # log = logging.getLogger("avica.pipeline")
@@ -552,10 +557,14 @@ class AverageMS(PipelineStepBase):
         log.info(msg)
         with step_stage(msg):
             del_fl(wd_meta.metafolder, 0, wd_meta.msmeta_sources, rm=True)
+            mpi_runner = PersistentMpiCasaRunner(casadir=casadir, mpi_cores=mpi_cores_avgms)
+            tasks_list = []
+            res = []
+            for wd_ifolder in wd_meta.wd_used:
+                this_wd_meta                =   WorkDirMeta(wd_ifolder=wd_ifolder)
 
-            for wd_ifolder in wd_ifolders:
-                obs                 =   wd_meta.obs_dic
-                vis                         =   wd_meta.vis
+                obs                         =   this_wd_meta.obs_dic
+                vis                         =   this_wd_meta.vis
 
                 if vis is None:
                     raise FileNotFoundError(f"vis not found : {vis}")
@@ -572,7 +581,7 @@ class AverageMS(PipelineStepBase):
                         if 'known' not in band:
                             band_counts[band]   =   1
                 global_bands_dict.update(bandms.bands_dict)
-                save_metafile(wd_meta.metafile_msmeta_sources, {'bands_dict': global_bands_dict})
+                save_metafile(this_wd_meta.metafile_msmeta_sources, {'bands_dict': global_bands_dict})
 
 
                 band_chwidth, good_scan_list, missing_antennas  = {}, [], set()
@@ -580,19 +589,19 @@ class AverageMS(PipelineStepBase):
                 log.info(msg)
                 with step_stage(msg):
                     try:
-                        success_band            =   []
-
                         for band in bandms.bands_dict:
                             for bandobsid in range(bandms.bands_dict[band]['nobs']):
                                 bandobs         =   f"{band}{bandobsid}" if bandms.bands_dict[band]['nobs']>1 else f"{band}"
                                 bands_known.append(bandobs)
                                 d_bands         =   bandms.get_band_detail(band)[f"{band}{bandobsid}"]
-                                wd_b, iwd_b     =   wd_meta.to_new_WD(bandobs, target="")
+                                wd_b, iwd_b = this_wd_meta.to_new_WD(bandobs, target="")
+                                wd_b = wd_b.absolute()
+                                iwd_b_new = f"{wd_b}/input_template_{bandobs}"
                                                                                                         # changed the input_template name as the freqid identifier number is bogus, and band key is unique
-                                iwd_b_new       =   f"{wd_b.absolute()}/input_template_{bandobs}"
-                                shutil.move(str(iwd_b), iwd_b_new)
-                                iwd_b           =   iwd_b_new
 
+                                if not Path(iwd_b_new).exists():
+                                    shutil.move(str(iwd_b), iwd_b_new)
+                                iwd_b           =   deepcopy(iwd_b_new)
 
                                 for spw in d_bands['spws']:
                                     good_scan_list.append(d_bands[spw]['good_scans'])
@@ -644,49 +653,64 @@ class AverageMS(PipelineStepBase):
                                                                 timeaverage=timeavg, timebin=timebin)
 
                                         step             =   task.to_step(logfile=casalogfile, casadir=casadir, errf=errcasalogfile, mpi_cores=mpi_cores)
-                                        tasks_list        =   [step]
+                                        tasks_list.append((step,outvis, band, errcasalogfile, obs_b, iwd_b))
                                         wds_ifolder_for_payload.append(wd_ifolder)
-                                        wd_meta.wd_used
 
 
-                                    payload             =   MpiCasaPayload(tasks_list=tasks_list)
-                                    payload.run()
-                                    if not Path(outvis).exists():
-                                        self.result.detail[band]     =   f"check {errcasalogfile}"
-                                        self.result.success.append(False)
-                                    else:
-                                        str(Path(outvis).name)
 
-                                    # --------------------------------------------------------------------
-
-                                if Path(outvis).exists():
-                                    self.result.success.append(True)
-                                    fillinp_fromiwd(wd_ifolder, iwd_b)
-                                    create_config(obs_b, f'{iwd_b}/observation.inp')
-                                    success_band.append(band)
-
-
-                        succeed         =   len(success_band)/len(bands_known)                                                       # this should update for each freqid
-                        comment_val     =   " ".join([f"{b}:{w} kHz" for b,w in band_chwidth.items() if b in success_band])
-                        success_val     =   " ".join([f"{b}:{td_b}" for b,td_b in self.result.detail.items()])
-                        self.result.success_count       =   len(success_band)
-                        self.result.failed_count        +=  len(bands_known) -len(success_band)
-                        if succeed  == 1:
-                            # success_val =   lf.get_value(col) + ' ' + success_val if lf.get_value(col) else success_val
-                            comment_val                     =   lf.get_value(self.colnames.comment_col) + ' ' + comment_val if lf.get_value(self.colnames.comment_col) else comment_val
-                            _                               =   lf.put_value(success_val, self.colnames.working_col, self.result.success_count)
-                            _                               =   lf.put_value(comment_val, self.colnames.comment_col)
-
-                        elif succeed>0:
-                            _                               =   lf.put_value(success_val, self.colnames.working_col, self.result.success_count)
-                            failed_band                     =   " ".join([f"{b}: failed" for b,w in band_chwidth.items() if b not in success_band])
-
-                            _                               =   lf.put_value(f'{comment_val} {failed_band}', self.colnames.comment_col, self.result.failed_count)
-                        else:
-                            _                               =   lf.put_value('failed', self.colnames.working_col, self.result.failed_count)
-
+                                        res_mpi = mpi_runner.run_task(task_name=step.cmd.task_casa,
+                                                            args=step.cmd.args,
+                                                            args_type=step.cmd.args_type,
+                                                            block=False)
+                                        res.append(res_mpi)
                     except Exception as e:
                         traceback.print_exc()
+                success_band            =   []
+                for i,(step, outvis, band, errcasalogfile, obs_b, iwd_b) in enumerate(tasks_list):
+                    res_mpi = mpi_runner.get_response(
+                        command_ids=res[i],
+                        block=True
+                    )
+
+
+                    if not Path(outvis).exists():
+                        self.result.detail[band]     =   f"check {errcasalogfile}"
+                        self.result.success.append(False)
+                    else:
+                        self.result.detail[band]     =   str(Path(outvis).name)
+
+                            # --------------------------------------------------------------------
+
+
+
+                    if Path(outvis).exists():
+                        self.result.success.append(True)
+                        fillinp_fromiwd(wd_ifolder, iwd_b)
+                        create_config(obs_b, f'{iwd_b}/observation.inp')
+                        success_band.append(band)
+
+
+                succeed         =   len(success_band)/len(bands_known)                                                       # this should update for each freqid
+                comment_val     =   " ".join([f"{b}:{w} kHz" for b,w in band_chwidth.items() if b in success_band])
+                success_val     =   " ".join([f"{b}:{td_b}" for b,td_b in self.result.detail.items()])
+                self.result.success_count       =   len(success_band)
+                self.result.failed_count        +=  len(bands_known) -len(success_band)
+                if succeed  == 1:
+                    # success_val =   lf.get_value(col) + ' ' + success_val if lf.get_value(col) else success_val
+                    comment_val                     =   lf.get_value(self.colnames.comment_col) + ' ' + comment_val if lf.get_value(self.colnames.comment_col) else comment_val
+                    _                               =   lf.put_value(success_val, self.colnames.working_col, self.result.success_count)
+                    _                               =   lf.put_value(comment_val, self.colnames.comment_col)
+
+                elif succeed>0:
+                    _                               =   lf.put_value(success_val, self.colnames.working_col, self.result.success_count)
+                    failed_band                     =   " ".join([f"{b}: failed" for b,w in band_chwidth.items() if b not in success_band])
+
+                    _                               =   lf.put_value(f'{comment_val} {failed_band}', self.colnames.comment_col, self.result.failed_count)
+                else:
+                    _                               =   lf.put_value('failed', self.colnames.working_col, self.result.failed_count)
+
+
+            mpi_runner.close()
 
         global_bands_dict['bands_known'] = bands_known
         save_metafile(wd_meta.metafile_msmeta_sources, {'bands_dict': global_bands_dict})

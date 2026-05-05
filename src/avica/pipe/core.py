@@ -458,96 +458,79 @@ def pipeline_context(params: dict):
     finally:
         PipelineContext.reset()
 
-@dataclass
 class WorkDirMeta:
-    wd_ifolder  :   str
+    def __init__(self, wd_ifolder):
+        self.wd_ifolder = wd_ifolder
 
-    wd: str = field(init=False)
-    vis: str = field(init=False)
-    ms_name: str = field(init=False)
-    obs_dic: Dict = field(init=False)
-    metafolder: str = field(init=False)
-
-
-    # -------------- input wd_ifolder & fitsfiles used
-
-    ff_used : List[str] =   field(default_factory=list)
-    wd_used : List[str] =   field(default_factory=list)
-
-    # --------------- band | target
-
-    band: str = ""
-    target: str = ""
-
-    wd_b: str = field(default=str)
-    wd_b_target: str = field(default=str)
-    vis_b: str = field(default=str)
-    vis_b_target: str = field(default=str)
-
-    # --------------- metafile names
-    meta_av_wd_ff  : str =   "available_wd_ifolder.avica"
-    meta_used_ff :  str = "fitsfiles_used.avica"
-    meta_sources_snrating: str = "sources.avica"
-    meta_refants_snrating: str = "refants.avica"
-    msmeta_sources:str = 'msmeta_sources.avica'
-
-    snrating_out: str = "snrating.out"
-    listobs_out:    str =   "listobs_fits.out"
-    match_coord_out: str = "class_search.out"
-
-
-
-    metafile_available_wd_ff: str = ""
-    metafile_used_ff: str = ""
-    metafile_sources_snrating: str = ""
-    metafile_refants_snrating: str = ""
-    outfile_listobs_out: str = ""
-    matched_coord_outfile: str = ""
-
-    # ---  initialize values
-
-    def __post_init__(self):
-        wd         =   Path(self.wd_ifolder).parent
-        self.wd         =   str(wd)
-        self.metafolder =   str(wd / "avica.meta")
+        # -----------------------------
+        self.wd         =   Path(self.wd_ifolder).parent.absolute()
+        self.metafolder =   str(self.wd / "avica.meta")
         self.obs_dic     =   self.get_inp(inpfile="observation.inp")
-        if self.obs_dic:
-            if isinstance(self.obs_dic, list):
-                self.obs_dic = self.obs_dic[0]
-            self.ms_name    =   self.obs_dic['ms_name']
-            self.vis    =   str(wd / self.ms_name)
-        else:
-            self.obs_dic =  None
-            self.ms_name    =   None
-            self.vis    =   None
+        self.ms_name    =   None
+        self.vis    =   None
 
+         # -------------- input wd_ifolder & fitsfiles used
+
+        self.ff_used : List[str] =   []
+        self.wd_used : List[str] =   []
+
+        # --------------- band | target
+
+        self.band: str = ""
+        self.target: str = ""
+
+        self.wd_b: str = ""
+        self.wd_b_target: str = ""
+        self.vis_b: str = ""
+        self.vis_b_target: str = ""
+
+        # --------------- metafile names
+        self.meta_av_wd_ff  : str =   "available_wd_ifolder.avica"
+        self.meta_used_ff :  str = "fitsfiles_used.avica"
+        self.meta_sources_snrating: str = "sources.avica"
+        self.meta_refants_snrating: str = "refants.avica"
+        self.msmeta_sources:str = 'msmeta_sources.avica'
+
+        self.listobs_filename : str = "listobs.json"
+
+        self.snrating_out: str = "snrating.out"
+        self.listobs_out:    str =   "listobs_fits.out"
+        self.match_coord_out: str = "class_search.out"
+
+        # --------------- metafile complete paths
+        self.wd_used : str = ""
+
+        self.metafile_available_wd_ff = f"{self.metafolder}/{self.meta_av_wd_ff}"
+        self.metafile_used_ff = f"{self.metafolder}/{self.meta_used_ff}"
+        self.metafile_msmeta_sources = f"{self.metafolder}/{self.msmeta_sources}"
+        self.metafile_sources_snrating  = f"{self.metafolder}/{self.meta_sources_snrating}"
+        self.metafile_refants_snrating  = f"{self.metafolder}/{self.meta_refants_snrating}"
+        self.metafile_listobs = f"{self.metafolder}/{self.listobs_filename}"
         self.outfile_listobs_out    =   f"{self.metafolder}/{self.listobs_out}"
         self.matched_coord_outfile  =   f"{self.metafolder}/{self.match_coord_out}"
 
-
-        if wd.exists():
-            # --------------- get used wd_ifolders and fitsfiles
-            self.metafile_available_wd_ff = f"{self.metafolder}/{self.meta_av_wd_ff}"
-            self.metafile_used_ff = f"{self.metafolder}/{self.meta_used_ff}"
-            self.metafile_msmeta_sources = f"{self.metafolder}/{self.msmeta_sources}"
-            self.metafile_sources_snrating  = f"{self.metafolder}/{self.meta_sources_snrating}"
-            self.metafile_refants_snrating  = f"{self.metafolder}/{self.meta_refants_snrating}"
-
-
-            if Path(self.metafile_available_wd_ff).exists():
+        # --------------- get used wd_ifolders and fitsfiles
+        if Path(self.metafile_available_wd_ff).exists():
                 dic_available_wd_ff = read_metafile(self.metafile_available_wd_ff)
                 if "input_folder" in dic_available_wd_ff:
                     self.wd_used = dic_available_wd_ff['input_folder']
 
-            if Path(self.metafile_used_ff).exists():
-                dic_used_ff = read_metafile(self.metafile_used_ff)
+        if Path(self.metafile_used_ff).exists():
+            dic_used_ff = read_metafile(self.metafile_used_ff)
 
-                if "filepath" in dic_used_ff:
-                    self.ff_used = dic_used_ff['filepath']
+            if "filepath" in dic_used_ff:
+                self.ff_used = dic_used_ff['filepath']
+
+        if self.obs_dic:
+            if isinstance(self.obs_dic, list):
+                self.obs_dic = self.obs_dic[0]
+            self.ms_name    =   self.obs_dic['ms_name']
+            self.vis    =   str(self.wd / self.ms_name)
+
 
     def to_new_WD(self, band, target, create=True) -> tuple[Path, Path]:
-        iwd                 =   Path(self.wd_ifolder)
-        wd_suffix           =   iwd.parent
+        iwd                 =   Path(self.wd_ifolder).absolute()
+        wd_suffix           =   iwd.parent.absolute()
         iwd_b_suffix        =   iwd
 
         if band:
@@ -575,12 +558,10 @@ class WorkDirMeta:
         return result
 
 
-    def get_diclistobs(self, listobs_filename='listobs.json'):
+    def get_diclistobs(self):
         dic_data = {}
-
-        listobsfile = f"{self.metafolder}/{listobs_filename}"
-        if Path(listobsfile).exists():
-            dic_data = read_metafile(listobsfile)
+        if Path(self.metafile_listobs).exists():
+            dic_data = read_metafile(self.metafile_listobs)
             if 'listobs' in dic_data:
                 for idx_str, obs_content in dic_data['listobs'].items():
                     if 'scan' not in obs_content:
@@ -589,8 +570,10 @@ class WorkDirMeta:
                         obs_content['source_id'] = obs_content.pop('sid')
         return dic_data
 
+
     def to_dict(self):
-        return asdict(self)
+        return self.__dict__
+
 
 @dataclass
 class PipelineStepValidatorResult:
@@ -688,7 +671,7 @@ class InitVariables(PipelineStepValidatorBase):
         if isinstance(fitsfilenames, str):
             fitsfilenames = fitsfilenames.split(",")
 
-        wd_ifolder, filepaths                       = setup_workdir(lf, target_dir, fitsfilenames, allfitsfile, picard_input_template=picard_input_template)
+        wd_ifolder, filepaths                       = setup_workdir(lf, f"{str(Path(target_dir).absolute())}/", fitsfilenames, allfitsfile, picard_input_template=picard_input_template)
         if not filepaths:
             return PipelineStepValidatorResult(success=[False], msg="no fitsfiles found")
 
